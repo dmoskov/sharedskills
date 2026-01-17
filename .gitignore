@@ -15,3 +15,9 @@ venv/
 
 # OS
 .DS_Store
+
+# Local memory
+.memory/sessions/
+
+# Letta config (contains agent IDs)
+letta/config.json

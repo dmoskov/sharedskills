@@ -1,0 +1,9 @@
+{
+  "agent_id": null,
+  "settings": {
+    "search_limit": 5,
+    "dedup_threshold": 0.85,
+    "max_archival_per_session": 10,
+    "max_local_per_category": 50
+  }
+}
