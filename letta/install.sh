@@ -74,6 +74,7 @@ cp "$SCRIPT_DIR/hooks/prompt_submit.py" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/hooks/post_tool.py" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/hooks/session_end_prepare.py" "$HOOKS_DIR/"
 cp "$SCRIPT_DIR/hooks/session_end_save.py" "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/hooks/pre_tool_bash.py" "$HOOKS_DIR/"
 
 # Copy utils
 cp "$SCRIPT_DIR/hooks/utils/__init__.py" "$HOOKS_DIR/utils/"
@@ -158,6 +159,18 @@ hooks['UserPromptSubmit'].append({
         "type": "command",
         "command": "~/.claude/hooks/letta/prompt_submit.py",
         "timeout": 10
+    }]
+})
+
+# Add PreToolUse hook for bash permission prompts
+if 'PreToolUse' not in hooks:
+    hooks['PreToolUse'] = []
+hooks['PreToolUse'].append({
+    "matcher": "Bash",
+    "hooks": [{
+        "type": "command",
+        "command": "~/.claude/hooks/letta/pre_tool_bash.py",
+        "timeout": 5
     }]
 })
 
