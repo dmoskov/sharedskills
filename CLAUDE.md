@@ -1,3 +1,40 @@
+# AI Dev Tools - CLAUDE.md
+
+## Universal Instructions
+See: ~/Code/CLAUDE.md for universal coding standards
+
+## Project-Specific Instructions
+
+### Project Overview
+AI Dev Tools is a collection of tools for AI-assisted development:
+- **asana/** - REST API client for Asana task management
+- **letta/** - Persistent memory hooks for Claude Code
+
+### Development Guidelines
+- Keep tools self-contained with minimal dependencies
+- Each tool should work independently
+- Document all public APIs
+- Include setup guides for each tool
+
+### Tool Structure
+Each tool directory should have:
+- `README.md` - Quick start and overview
+- `SETUP.md` - Detailed setup instructions
+- `requirements.txt` - Python dependencies
+- Main script(s) with CLI support
+
+### Testing
+```bash
+# Asana
+python3 asana/asana_client.py workspaces  # Requires ASANA_ACCESS_TOKEN
+
+# Letta hooks syntax check
+python3 -m py_compile letta/hooks/*.py
+python3 -m py_compile letta/hooks/utils/*.py
+```
+
+---
+
 # Universal Development Guidelines for Claude
 Last Updated: 2025-01-17
 
