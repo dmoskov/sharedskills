@@ -1,0 +1,313 @@
+{
+  "name": "Merged Claude Configuration - Pan & Family Organization",
+  "description": "Merged and generalized settings from pan and family-organization projects",
+  "version": "2.0.0",
+  "created": "2025-01-17",
+  "sources": ["pan/.claude/settings.local.json", "sutro/family-organization/.claude/settings.local.json"],
+
+  "permissions": {
+    "bash": {
+      "enabled": true,
+      "mode": "allow_with_deny",
+
+      "allow": {
+        "description": "General permissive commands that are safe across most projects",
+        "categories": {
+
+          "file_operations": [
+            "ls*",
+            "pwd",
+            "cd*",
+            "cat*",
+            "echo*",
+            "touch*",
+            "mkdir*",
+            "cp*",
+            "mv*",
+            "find*",
+            "grep*",
+            "diff*",
+            "head*",
+            "tail*",
+            "less*",
+            "more*",
+            "wc*",
+            "sort*",
+            "uniq*",
+            "chmod*",
+            "chown*"
+          ],
+
+          "development_tools": [
+            "git*",
+            "npm*",
+            "yarn*",
+            "pnpm*",
+            "pip*",
+            "python*",
+            "node*",
+            "cargo*",
+            "make*",
+            "cmake*",
+            "gcc*",
+            "g++*",
+            "ruff*",
+            "black*",
+            "eslint*",
+            "prettier*",
+            "pytest*",
+            "jest*"
+          ],
+
+          "package_managers": [
+            "brew install*",
+            "brew update*",
+            "brew upgrade*",
+            "apt-get install*",
+            "apt-get update*",
+            "yum install*",
+            "dnf install*",
+            "pip install*",
+            "pip3 install*",
+            "pipx install*",
+            "npm install*",
+            "yarn add*",
+            "cargo install*"
+          ],
+
+          "aws_operations": [
+            "aws*",
+            "aws ecs*",
+            "aws ec2*",
+            "aws lambda*",
+            "aws s3*",
+            "aws cloudformation*",
+            "aws iam*",
+            "aws rds*",
+            "aws secretsmanager*",
+            "aws logs*",
+            "aws events*",
+            "aws sts*"
+          ],
+
+          "container_operations": [
+            "docker*",
+            "docker-compose*",
+            "kubectl*",
+            "helm*"
+          ],
+
+          "infrastructure": [
+            "terraform*",
+            "ansible*",
+            "packer*"
+          ],
+
+          "database_operations": [
+            "psql*",
+            "mysql*",
+            "sqlite3*",
+            "mongosh*",
+            "redis-cli*"
+          ],
+
+          "network_tools": [
+            "curl*",
+            "wget*",
+            "nc*",
+            "telnet*",
+            "ssh*",
+            "scp*",
+            "rsync*"
+          ],
+
+          "process_management": [
+            "ps*",
+            "top",
+            "htop",
+            "kill*",
+            "pkill*",
+            "pgrep*",
+            "lsof*",
+            "netstat*"
+          ],
+
+          "shell_scripting": [
+            "source*",
+            "export*",
+            "env",
+            "which*",
+            "whereis*",
+            "type*",
+            "alias*",
+            "unset*",
+            "set*"
+          ],
+
+          "archive_tools": [
+            "tar*",
+            "zip*",
+            "unzip*",
+            "gzip*",
+            "gunzip*",
+            "bzip2*",
+            "bunzip2*"
+          ],
+
+          "text_processing": [
+            "sed*",
+            "awk*",
+            "jq*",
+            "yq*",
+            "xmlstarlet*"
+          ],
+
+          "monitoring_logging": [
+            "tail -f*",
+            "journalctl*",
+            "dmesg*"
+          ],
+
+          "testing_tools": [
+            "jest*",
+            "mocha*",
+            "cypress*",
+            "playwright*"
+          ]
+        },
+
+        "patterns": [
+          "./*.sh*",
+          "./scripts/*.sh*",
+          "npm run*",
+          "yarn*",
+          "pnpm*",
+          "make*",
+          "cargo*",
+          "python -m*",
+          "python3 -m*"
+        ]
+      },
+
+      "deny": {
+        "description": "Dangerous commands that should always be blocked",
+        "commands": [
+          "rm -rf /",
+          "rm -rf /*",
+          "rm -rf ~",
+          "rm -rf .",
+          "rm -rf ..",
+          "rm -rf $HOME",
+          "dd if=/dev/zero of=/dev/*",
+          "dd if=/dev/random of=/dev/*",
+          "mkfs*",
+          "fdisk*",
+          "parted*",
+          "> /dev/sda*",
+          "> /etc/passwd",
+          "> /etc/shadow",
+          "> /etc/sudoers",
+          "shutdown*",
+          "reboot*",
+          "halt*",
+          "init 0",
+          "init 6",
+          "systemctl poweroff",
+          "systemctl reboot",
+          ":(){ :|:& };:",
+          "chmod -R 777 /",
+          "chmod -R 000 /",
+          "chown -R * /",
+          "iptables -F",
+          "iptables -X",
+          "ufw disable"
+        ],
+
+        "patterns": [
+          "*eval(*",
+          "*exec(*",
+          "curl * | bash",
+          "curl * | sh",
+          "wget * | bash",
+          "wget * | sh",
+          "*base64 -d | bash",
+          "*base64 -d | sh",
+          "git push --force master",
+          "git push --force main",
+          "git push --force origin master",
+          "git push --force origin main"
+        ]
+      },
+
+      "require_confirmation": {
+        "description": "Commands that need user confirmation",
+        "patterns": [
+          "rm -r*",
+          "rm -f*",
+          "git reset --hard*",
+          "git clean*",
+          "git push --force*",
+          "git push -f*",
+          "docker system prune*",
+          "docker rm*",
+          "docker rmi*",
+          "kubectl delete*",
+          "terraform destroy*",
+          "aws * delete*",
+          "aws * terminate*",
+          "DROP DATABASE*",
+          "DROP TABLE*",
+          "TRUNCATE*"
+        ]
+      }
+    },
+
+    "mcp_tools": {
+      "description": "MCP tools are generally allowed",
+      "allow": [
+        "mcp__asana__*",
+        "mcp__slack__*",
+        "mcp__github__*"
+      ]
+    },
+
+    "web_access": {
+      "description": "Web domains that are generally safe to access",
+      "allow": [
+        "docs.anthropic.com",
+        "github.com",
+        "gitlab.com",
+        "stackoverflow.com",
+        "developer.mozilla.org",
+        "docs.aws.amazon.com",
+        "cloud.google.com/docs",
+        "docs.microsoft.com",
+        "nodejs.org",
+        "python.org",
+        "rust-lang.org",
+        "golang.org",
+        "docker.com",
+        "kubernetes.io"
+      ]
+    }
+  },
+
+  "recommendations": {
+    "implementation_notes": [
+      "This merged configuration is more general and permissive than the original project-specific settings",
+      "Removed hardcoded IDs, ARNs, and specific AWS resource identifiers",
+      "Generalized patterns using wildcards instead of specific file paths",
+      "Grouped commands by category for easier management",
+      "Kept all generally safe operations while blocking only truly dangerous ones",
+      "Project-specific settings should override these defaults when needed"
+    ],
+
+    "usage_guidelines": [
+      "Use this as a base configuration for new projects",
+      "Override with project-specific settings in .claude/settings.local.json",
+      "Review and update deny lists periodically",
+      "Add project-specific AWS resource ARNs in local settings",
+      "Consider environment-specific restrictions (dev/staging/prod)"
+    ]
+  }
+}

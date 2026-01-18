@@ -1,0 +1,41 @@
+{
+  "name": "3d-figure-design",
+  "version": "1.0.0",
+  "description": "A web-based 3D figure design application with specialized leg mapping capabilities",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "keywords": [
+    "3d",
+    "webgl",
+    "three.js",
+    "figure-design",
+    "anatomy",
+    "medical-visualization"
+  ],
+  "author": "Dustin Moskovitz",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.165.0",
+    "@react-three/fiber": "^8.16.8",
+    "@react-three/drei": "^9.109.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.4",
+    "leva": "^0.9.35"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.165.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.5",
+    "vitest": "^2.0.5"
+  }
+}

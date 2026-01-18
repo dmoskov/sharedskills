@@ -1,0 +1,500 @@
+{
+  "name": "Example Claude Configuration",
+  "description": "Complete example showing how to configure Claude with allow and deny lists",
+  "version": "1.0.0",
+  "environment": "development",
+
+  "permissions": {
+    "bash": {
+      "enabled": true,
+      "mode": "allow_with_deny",
+
+      "allow": {
+        "description": "Commands that are explicitly allowed",
+        "commands": [
+          "ls",
+          "pwd",
+          "cd",
+          "cat",
+          "echo",
+          "grep",
+          "find",
+          "sed",
+          "awk",
+          "curl",
+          "wget",
+          "git status",
+          "git add",
+          "git commit",
+          "git push",
+          "git pull",
+          "git branch",
+          "git checkout",
+          "npm install",
+          "npm run",
+          "npm test",
+          "yarn",
+          "pnpm",
+          "python",
+          "python3",
+          "pip install",
+          "pip list",
+          "node",
+          "deno",
+          "bun",
+          "cargo build",
+          "cargo test",
+          "cargo run",
+          "make",
+          "cmake",
+          "gcc",
+          "g++",
+          "docker build",
+          "docker run",
+          "docker ps",
+          "docker logs",
+          "docker-compose up",
+          "docker-compose down",
+          "kubectl get",
+          "kubectl describe",
+          "kubectl logs",
+          "aws s3",
+          "aws ec2 describe",
+          "aws lambda list",
+          "gcloud compute",
+          "az vm list",
+          "terraform plan",
+          "terraform apply",
+          "ansible-playbook"
+        ],
+
+        "patterns": [
+          "npm run *",
+          "yarn *",
+          "pnpm *",
+          "git log*",
+          "git diff*",
+          "git show*",
+          "pytest*",
+          "jest*",
+          "vitest*",
+          "eslint*",
+          "prettier*"
+        ]
+      },
+
+      "deny": {
+        "description": "Commands that are explicitly denied even if they match allow patterns",
+        "commands": [
+          "rm -rf /",
+          "rm -rf /*",
+          "rm -rf ~",
+          "rm -rf .",
+          "dd if=/dev/zero",
+          "mkfs",
+          "shutdown",
+          "reboot",
+          "halt",
+          ":(){ :|:& };:",
+          "chmod -R 777 /",
+          "chmod -R 000 /",
+          "iptables -F",
+          "git push --force",
+          "git push -f"
+        ],
+
+        "patterns": [
+          "rm -rf*",
+          "*> /dev/sda*",
+          "*> /etc/passwd",
+          "*> /etc/shadow",
+          "curl * | bash",
+          "wget * | sh",
+          "*eval(*",
+          "*exec(*"
+        ]
+      },
+
+      "require_confirmation": {
+        "description": "Commands that need user confirmation before execution",
+        "commands": [
+          "rm -r",
+          "git reset --hard",
+          "git clean",
+          "docker system prune",
+          "npm publish",
+          "yarn publish",
+          "pip uninstall",
+          "apt-get remove",
+          "yum remove",
+          "brew uninstall"
+        ]
+      }
+    },
+
+    "file_access": {
+      "enabled": true,
+      "mode": "allow_with_deny",
+
+      "allow": {
+        "description": "File paths and patterns that are accessible",
+        "paths": [
+          "~/Code/**",
+          "~/Documents/**",
+          "~/Desktop/**",
+          "~/Downloads/**",
+          "/tmp/**",
+          "/var/tmp/**"
+        ],
+
+        "file_types": [
+          "*.js",
+          "*.ts",
+          "*.jsx",
+          "*.tsx",
+          "*.py",
+          "*.go",
+          "*.rs",
+          "*.java",
+          "*.c",
+          "*.cpp",
+          "*.h",
+          "*.hpp",
+          "*.md",
+          "*.txt",
+          "*.json",
+          "*.yaml",
+          "*.yml",
+          "*.toml",
+          "*.ini",
+          "*.conf",
+          "*.html",
+          "*.css",
+          "*.scss",
+          "*.sass",
+          "*.less"
+        ]
+      },
+
+      "deny": {
+        "description": "File paths and patterns that are blocked",
+        "paths": [
+          "/etc/passwd",
+          "/etc/shadow",
+          "/etc/sudoers",
+          "**/.ssh/id_rsa",
+          "**/.ssh/id_dsa",
+          "**/.ssh/id_ecdsa",
+          "**/.ssh/id_ed25519",
+          "**/.aws/credentials",
+          "**/.env.production",
+          "**/secrets.yml",
+          "**/private.key",
+          "**/*.pem",
+          "**/.gnupg/**"
+        ],
+
+        "file_types": [
+          "*.key",
+          "*.pem",
+          "*.p12",
+          "*.pfx",
+          "*.jks",
+          "*.keystore"
+        ]
+      },
+
+      "read_only": {
+        "description": "Files that can be read but not modified",
+        "paths": [
+          "/etc/hosts",
+          "/etc/os-release",
+          "**/.gitignore",
+          "**/package-lock.json",
+          "**/yarn.lock",
+          "**/pnpm-lock.yaml",
+          "**/Cargo.lock",
+          "**/go.sum"
+        ]
+      }
+    },
+
+    "network": {
+      "enabled": true,
+      "mode": "allow_with_deny",
+
+      "allow": {
+        "description": "Network endpoints that are accessible",
+        "domains": [
+          "github.com",
+          "gitlab.com",
+          "bitbucket.org",
+          "npmjs.org",
+          "pypi.org",
+          "rubygems.org",
+          "crates.io",
+          "golang.org",
+          "docker.io",
+          "quay.io",
+          "*.amazonaws.com",
+          "*.googleapis.com",
+          "*.azure.com",
+          "localhost",
+          "127.0.0.1"
+        ],
+
+        "ports": [
+          80,
+          443,
+          3000,
+          3001,
+          4000,
+          5000,
+          5173,
+          8000,
+          8080,
+          8081,
+          9000
+        ]
+      },
+
+      "deny": {
+        "description": "Network endpoints that are blocked",
+        "domains": [
+          "*.production.internal",
+          "*.prod.company.com",
+          "prod-*"
+        ],
+
+        "ip_ranges": [
+          "10.0.0.0/8",
+          "172.16.0.0/12",
+          "192.168.0.0/16"
+        ],
+
+        "ports": [
+          22,
+          23,
+          445,
+          3389,
+          5900
+        ]
+      }
+    },
+
+    "environment_variables": {
+      "allow_read": [
+        "PATH",
+        "HOME",
+        "USER",
+        "NODE_ENV",
+        "PYTHON_PATH",
+        "GOPATH",
+        "CARGO_HOME"
+      ],
+
+      "allow_write": [
+        "NODE_ENV",
+        "DEBUG",
+        "LOG_LEVEL",
+        "TEST_*"
+      ],
+
+      "deny": [
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "GITHUB_TOKEN",
+        "DATABASE_PASSWORD",
+        "API_SECRET",
+        "PRIVATE_KEY"
+      ]
+    },
+
+    "git": {
+      "allow": {
+        "operations": [
+          "clone",
+          "pull",
+          "push",
+          "commit",
+          "add",
+          "status",
+          "diff",
+          "log",
+          "branch",
+          "checkout",
+          "merge",
+          "rebase"
+        ]
+      },
+
+      "deny": {
+        "operations": [
+          "push --force",
+          "push -f",
+          "reset --hard HEAD~",
+          "clean -fdx",
+          "filter-branch"
+        ],
+
+        "branches": [
+          "main",
+          "master",
+          "production",
+          "release/*"
+        ]
+      },
+
+      "require_confirmation": [
+        "push",
+        "reset",
+        "rebase",
+        "merge"
+      ]
+    },
+
+    "docker": {
+      "allow": {
+        "operations": [
+          "build",
+          "run",
+          "ps",
+          "logs",
+          "exec",
+          "stop",
+          "start",
+          "restart",
+          "pull",
+          "push"
+        ]
+      },
+
+      "deny": {
+        "operations": [
+          "rm -f",
+          "system prune -a",
+          "volume prune",
+          "network prune"
+        ],
+
+        "flags": [
+          "--privileged",
+          "--pid=host",
+          "--network=host"
+        ]
+      }
+    },
+
+    "database": {
+      "allow": {
+        "operations": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE",
+          "CREATE TABLE",
+          "ALTER TABLE",
+          "CREATE INDEX"
+        ],
+
+        "databases": [
+          "development",
+          "test",
+          "staging"
+        ]
+      },
+
+      "deny": {
+        "operations": [
+          "DROP DATABASE",
+          "DROP SCHEMA",
+          "TRUNCATE",
+          "GRANT ALL PRIVILEGES"
+        ],
+
+        "databases": [
+          "production",
+          "prod",
+          "live"
+        ]
+      }
+    }
+  },
+
+  "limits": {
+    "max_file_size": "10MB",
+    "max_command_execution_time": "30s",
+    "max_network_request_size": "50MB",
+    "max_concurrent_operations": 10,
+    "max_memory_usage": "2GB",
+    "max_cpu_usage": "80%"
+  },
+
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "include_commands": true,
+    "include_file_access": true,
+    "include_network": true,
+    "log_denied_operations": true,
+    "log_file": "~/.claude/activity.log"
+  },
+
+  "notifications": {
+    "on_denied_operation": true,
+    "on_dangerous_command": true,
+    "on_limit_exceeded": true,
+    "on_error": true
+  },
+
+  "overrides": {
+    "description": "Context-specific overrides",
+
+    "by_project": {
+      "~/Code/production-app": {
+        "bash": {
+          "deny": ["git push --force", "rm -rf"]
+        },
+        "file_access": {
+          "read_only": ["**/*"]
+        }
+      },
+
+      "~/Code/sandbox": {
+        "bash": {
+          "allow": ["*"]
+        },
+        "file_access": {
+          "allow": ["*"]
+        }
+      }
+    },
+
+    "by_time": {
+      "business_hours": {
+        "start": "09:00",
+        "end": "17:00",
+        "timezone": "America/New_York",
+        "restrictions": {
+          "deny_production_access": true,
+          "require_confirmation_for_all": true
+        }
+      }
+    }
+  },
+
+  "emergency": {
+    "override_password_required": true,
+    "override_logging": "always",
+    "override_notification": "admin@company.com",
+    "override_time_limit": "1h"
+  },
+
+  "metadata": {
+    "created_by": "admin",
+    "created_at": "2025-01-17",
+    "last_modified": "2025-01-17",
+    "review_required_after": "2025-02-17",
+    "compliance": ["SOC2", "ISO27001", "GDPR"]
+  }
+}

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Layers of Heroism - The Masculine Mongoose</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+            overflow-x: hidden;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #aaa;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+        #heroism-viz {
+            width: 100%;
+            height: 700px;
+            position: relative;
+        }
+        .layer {
+            position: absolute;
+            width: 80%;
+            left: 10%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        .layer:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        .layer-content {
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+        .layer-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .layer-description {
+            font-size: 14px;
+            line-height: 1.5;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .quote-box {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-left: 4px solid #ff6b6b;
+            max-width: 300px;
+            border-radius: 5px;
+        }
+        .quote {
+            font-style: italic;
+            color: #ffe66d;
+            margin-bottom: 10px;
+        }
+        .quote-source {
+            text-align: right;
+            color: #aaa;
+            font-size: 12px;
+        }
+        .layer-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.3;
+            z-index: 1;
+        }
+        .comparison {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #4ecdc4;
+            max-width: 600px;
+        }
+        .vs-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            gap: 30px;
+        }
+        .hero-comparison {
+            text-align: center;
+            flex: 1;
+        }
+        .vs-divider {
+            font-size: 24px;
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Layers of Heroism - The Masculine Mongoose</h1>
+    <p class="subtitle">"The greater hero is usually the one who's less immune to bullets"</p>
+    
+    <div id="heroism-viz">
+        <div class="quote-box">
+            <div class="quote">"The greater hero is usually the one who's less immune to bullets."</div>
+            <div class="quote-source">- The Real Masculine Mongoose</div>
+            <hr style="border-color: #444; margin: 15px 0;">
+            <div class="quote">"I'm not a real hero. I'm just doing a job."</div>
+            <div class="quote-source">- Bruce Kent</div>
+        </div>
+    </div>
+
+    <div class="comparison">
+        <h3 style="text-align: center; color: #4ecdc4; margin-bottom: 20px;">The Heroism Paradox</h3>
+        <div class="vs-container">
+            <div class="hero-comparison">
+                <h4 style="color: #ff6b6b;">Traditional Hero</h4>
+                <ul style="text-align: left; color: #aaa;">
+                    <li>Has superpowers</li>
+                    <li>Protected by abilities</li>
+                    <li>Risks are mitigated</li>
+                    <li>Glory and recognition</li>
+                    <li>Clear moral victories</li>
+                </ul>
+            </div>
+            <div class="vs-divider">VS</div>
+            <div class="hero-comparison">
+                <h4 style="color: #ffe66d;">Bruce's Heroism</h4>
+                <ul style="text-align: left; color: #aaa;">
+                    <li>No powers at all</li>
+                    <li>Completely vulnerable</li>
+                    <li>Every threat is real</li>
+                    <li>No recognition possible</li>
+                    <li>Moral ambiguity</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const layers = [
+            {
+                title: "Surface Layer: The Public Perception",
+                description: "Everyone 'knows' Bruce Kent is the Masculine Mongoose. A millionaire playboy superhero who fights crime. This is the carefully constructed lie that protects 20+ innocent lives.",
+                color: "#ff6b6b",
+                gradient: "linear-gradient(135deg, #ff6b6b, #ff8e53)",
+                height: 80,
+                top: 10
+            },
+            {
+                title: "The Deception Layer: Maintaining the Lie",
+                description: "Bruce must never deny being the hero, even when facing assassination attempts. He endures violence, can't form genuine relationships, and must let crimes happen to maintain the mask code.",
+                color: "#ffe66d",
+                gradient: "linear-gradient(135deg, #ffe66d, #ffb347)",
+                height: 100,
+                top: 25
+            },
+            {
+                title: "The Sacrifice Layer: What Bruce Gives Up",
+                description: "No authentic human connections. No honest conversations. No real relationships. Every moment is a performance. Dating becomes impossible when everyone thinks you're testing them.",
+                color: "#4ecdc4",
+                gradient: "linear-gradient(135deg, #4ecdc4, #44a3a3)",
+                height: 120,
+                top: 40
+            },
+            {
+                title: "The Vulnerability Layer: Facing Death Without Powers",
+                description: "Smart Guy With A Gun shoots at Bruce believing he's invulnerable. Bank robbers expect him to fight. Every threat is potentially lethal, yet Bruce must maintain the illusion.",
+                color: "#a8e6cf",
+                gradient: "linear-gradient(135deg, #a8e6cf, #7fcc7f)",
+                height: 100,
+                top: 57
+            },
+            {
+                title: "The Core Truth: Redefining Heroism",
+                description: "True heroism isn't about having powers—it's about sacrifice despite vulnerability. Bruce volunteers to be a target without any ability to protect himself, solely to keep innocent families safe.",
+                color: "#ff8b94",
+                gradient: "linear-gradient(135deg, #ff8b94, #ff6b6b)",
+                height: 80,
+                top: 72
+            }
+        ];
+
+        const viz = document.getElementById('heroism-viz');
+
+        layers.forEach((layer, index) => {
+            const layerDiv = document.createElement('div');
+            layerDiv.className = 'layer';
+            layerDiv.style.height = `${layer.height}px`;
+            layerDiv.style.top = `${layer.top}%`;
+            layerDiv.style.zIndex = layers.length - index;
+            
+            // Background gradient
+            const bgDiv = document.createElement('div');
+            bgDiv.className = 'layer-bg';
+            bgDiv.style.background = layer.gradient;
+            layerDiv.appendChild(bgDiv);
+            
+            // Content
+            const content = document.createElement('div');
+            content.className = 'layer-content';
+            content.innerHTML = `
+                <div class="layer-title">${layer.title}</div>
+                <div class="layer-description">${layer.description}</div>
+            `;
+            layerDiv.appendChild(content);
+            
+            // Animation on hover
+            layerDiv.addEventListener('mouseenter', () => {
+                bgDiv.style.opacity = '0.5';
+            });
+            layerDiv.addEventListener('mouseleave', () => {
+                bgDiv.style.opacity = '0.3';
+            });
+            
+            viz.appendChild(layerDiv);
+        });
+
+        // Add floating particles effect
+        function createParticle() {
+            const particle = document.createElement('div');
+            particle.style.position = 'absolute';
+            particle.style.width = '4px';
+            particle.style.height = '4px';
+            particle.style.background = '#fff';
+            particle.style.borderRadius = '50%';
+            particle.style.opacity = Math.random() * 0.5;
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.top = '100%';
+            particle.style.pointerEvents = 'none';
+            
+            viz.appendChild(particle);
+            
+            const duration = 10000 + Math.random() * 10000;
+            const drift = (Math.random() - 0.5) * 100;
+            
+            particle.animate([
+                { transform: 'translateY(0) translateX(0)', opacity: 0 },
+                { transform: `translateY(-${window.innerHeight}px) translateX(${drift}px)`, opacity: 0.5 },
+                { transform: `translateY(-${window.innerHeight * 2}px) translateX(${drift * 2}px)`, opacity: 0 }
+            ], {
+                duration: duration,
+                easing: 'linear'
+            }).onfinish = () => particle.remove();
+        }
+
+        // Create particles periodically
+        setInterval(createParticle, 500);
+
+        // Interactive layer connections
+        const svg = d3.select(viz).append('svg')
+            .style('position', 'absolute')
+            .style('top', 0)
+            .style('left', 0)
+            .style('width', '100%')
+            .style('height', '100%')
+            .style('pointer-events', 'none');
+
+        // Draw connecting lines between layers
+        layers.forEach((layer, i) => {
+            if (i < layers.length - 1) {
+                const y1 = (layer.top / 100) * 700 + layer.height / 2;
+                const y2 = (layers[i + 1].top / 100) * 700 + layers[i + 1].height / 2;
+                
+                svg.append('line')
+                    .attr('x1', '50%')
+                    .attr('y1', y1)
+                    .attr('x2', '50%')
+                    .attr('y2', y2)
+                    .attr('stroke', '#444')
+                    .attr('stroke-width', 2)
+                    .attr('stroke-dasharray', '5,5')
+                    .style('opacity', 0.3);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masculine Mongoose Story Network</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #network {
+            flex: 1;
+            position: relative;
+        }
+        
+        #sidebar {
+            width: 400px;
+            background: #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #444;
+        }
+        
+        h1 {
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            color: #3498db;
+        }
+        
+        h2 {
+            font-size: 1.3em;
+            margin: 20px 0 10px 0;
+            color: #e74c3c;
+        }
+        
+        h3 {
+            font-size: 1.1em;
+            margin: 15px 0 8px 0;
+            color: #f39c12;
+        }
+        
+        .node {
+            cursor: pointer;
+        }
+        
+        .node circle {
+            stroke-width: 3px;
+            transition: all 0.3s;
+        }
+        
+        .node:hover circle {
+            stroke-width: 5px;
+            filter: brightness(1.2);
+        }
+        
+        .node text {
+            font-size: 12px;
+            pointer-events: none;
+            text-anchor: middle;
+            fill: #fff;
+            font-weight: bold;
+        }
+        
+        .link {
+            stroke-opacity: 0.6;
+            stroke-width: 2px;
+        }
+        
+        .link-label {
+            font-size: 10px;
+            fill: #bbb;
+        }
+        
+        #legend {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid #fff;
+        }
+        
+        .info-box {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .belief-box {
+            background: #3a2a2a;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #e74c3c;
+        }
+        
+        .truth-box {
+            background: #2a3a2a;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #27ae60;
+        }
+        
+        .theme-box {
+            background: #2a2a3a;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 3px solid #9b59b6;
+        }
+        
+        ul {
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+        
+        li {
+            margin: 3px 0;
+            font-size: 0.9em;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        .selected {
+            stroke: #f39c12 !important;
+            stroke-width: 5px !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="network">
+            <svg id="svg"></svg>
+            <div id="legend">
+                <h3>Character Types</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e74c3c;"></div>
+                    <span>Core Characters</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3498db;"></div>
+                    <span>Supporting Characters</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f39c12;"></div>
+                    <span>Antagonists</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9b59b6;"></div>
+                    <span>Groups</span>
+                </div>
+            </div>
+            <div id="controls">
+                <button onclick="resetZoom()">Reset View</button>
+                <button onclick="toggleLabels()">Toggle Labels</button>
+            </div>
+        </div>
+        <div id="sidebar">
+            <h1>The Masculine Mongoose Story Map</h1>
+            <div id="info">
+                <div class="info-box">
+                    <h2>Click on a character to see details</h2>
+                    <p>The network shows relationships and beliefs between characters. Line colors indicate relationship types.</p>
+                </div>
+                
+                <div class="truth-box">
+                    <h3>Core Truth</h3>
+                    <p>Bruce Kent is NOT the Masculine Mongoose. He's a decoy protecting the real hero's identity.</p>
+                </div>
+                
+                <div class="theme-box">
+                    <h3>Key Themes</h3>
+                    <ul>
+                        <li>Identity vs. Truth</li>
+                        <li>Types of Heroism</li>
+                        <li>The Mask Code</li>
+                        <li>Isolation & Sacrifice</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data structure for the network
+        const nodes = [
+            // Core characters
+            {id: "bruce", name: "Bruce Kent", type: "core", 
+             truth: "Volunteer decoy pretending to be millionaire playboy",
+             beliefs: ["His job protects the Mongoose's family", "He's not a real hero", "The deception isolates him"],
+             color: "#e74c3c"},
+            
+            {id: "mongoose", name: "The Masculine Mongoose\n(Baibhav Hegadi)", type: "core",
+             truth: "The actual superhero disguised as a 'useless' speedster",
+             beliefs: ["Bruce is genuinely heroic", "Vulnerability defines heroism", "Has family to protect"],
+             color: "#e74c3c"},
+            
+            // Supporting characters
+            {id: "date", name: "Bruce's Date", type: "support",
+             truth: "Woman trying to date Bruce",
+             beliefs: ["Bruce is obviously the Mongoose", "Wants honesty", "Worth the danger"],
+             color: "#3498db"},
+            
+            {id: "terri", name: "Terri Green\n(Reporter)", type: "support",
+             truth: "Reporter at assassination attempt",
+             beliefs: ["Bruce is the Mongoose", "His bulletproof vest stunt was genius"],
+             color: "#3498db"},
+            
+            {id: "child", name: "Bank Child", type: "support",
+             truth: "Child at bank robbery",
+             beliefs: ["Heroes should fight villains", "Pretending isn't 'real'"],
+             color: "#3498db"},
+            
+            // Antagonists
+            {id: "pyro", name: "Professor\nPyrofessor", type: "antagonist",
+             truth: "Mad scientist bank robber",
+             beliefs: ["Bruce is Mongoose being 'prissy'", "He's showing off as a 'Bayesian'"],
+             color: "#f39c12"},
+            
+            {id: "assassin", name: "Smart Guy\nWith A Gun", type: "antagonist",
+             truth: "Assassin trying to prove Bruce is Mongoose",
+             beliefs: ["Shooting Bruce will prove he's invulnerable"],
+             color: "#f39c12"},
+            
+            // Groups
+            {id: "hostages", name: "Bank Hostages", type: "group",
+             truth: "Civilians caught in robbery",
+             beliefs: ["Bruce should save them", "He must have good reasons"],
+             color: "#9b59b6"},
+            
+            {id: "public", name: "The Public", type: "group",
+             truth: "General population",
+             beliefs: ["Everyone 'knows' Bruce is the Mongoose", "Can't prove it"],
+             color: "#9b59b6"},
+            
+            {id: "family", name: "Mongoose's Family", type: "group",
+             truth: "The real reason for the deception",
+             beliefs: ["Unknown/Protected"],
+             color: "#9b59b6"}
+        ];
+
+        const links = [
+            // Core relationship
+            {source: "bruce", target: "mongoose", type: "protects", label: "protects identity of"},
+            
+            // Bruce's relationships
+            {source: "date", target: "bruce", type: "romantic", label: "tries to date"},
+            {source: "terri", target: "bruce", type: "observes", label: "reports on"},
+            {source: "assassin", target: "bruce", type: "attacks", label: "shoots at"},
+            {source: "pyro", target: "bruce", type: "confronts", label: "confronts"},
+            {source: "child", target: "bruce", type: "questions", label: "questions"},
+            {source: "hostages", target: "bruce", type: "expects", label: "expect action from"},
+            
+            // Mongoose relationships
+            {source: "mongoose", target: "family", type: "protects", label: "protects"},
+            {source: "mongoose", target: "bruce", type: "employs", label: "employs/trusts"},
+            
+            // Public perception
+            {source: "public", target: "bruce", type: "believes", label: "believes is Mongoose"},
+            {source: "public", target: "mongoose", type: "unknown", label: "doesn't know real identity"},
+            
+            // Villain relationships
+            {source: "pyro", target: "hostages", type: "threatens", label: "threatens"},
+            {source: "assassin", target: "public", type: "proves", label: "tries to prove to"}
+        ];
+
+        // Set up SVG
+        const width = window.innerWidth - 400;
+        const height = window.innerHeight;
+        
+        const svg = d3.select("#svg")
+            .attr("width", width)
+            .attr("height", height);
+        
+        // Create zoom behavior
+        const g = svg.append("g");
+        const zoom = d3.zoom()
+            .scaleExtent([0.5, 3])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        svg.call(zoom);
+        
+        // Create force simulation
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-500))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(50));
+        
+        // Create links
+        const link = g.append("g")
+            .selectAll("line")
+            .data(links)
+            .enter().append("line")
+            .attr("class", "link")
+            .attr("stroke", d => {
+                switch(d.type) {
+                    case "protects": return "#27ae60";
+                    case "attacks": return "#e74c3c";
+                    case "believes": return "#f39c12";
+                    case "romantic": return "#e91e63";
+                    case "employs": return "#3498db";
+                    default: return "#7f8c8d";
+                }
+            });
+        
+        // Create link labels
+        const linkLabels = g.append("g")
+            .selectAll("text")
+            .data(links)
+            .enter().append("text")
+            .attr("class", "link-label")
+            .text(d => d.label);
+        
+        // Create nodes
+        const node = g.append("g")
+            .selectAll("g")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "node")
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+        
+        node.append("circle")
+            .attr("r", d => d.type === "core" ? 30 : 25)
+            .attr("fill", d => d.color)
+            .attr("stroke", "#fff");
+        
+        node.append("text")
+            .text(d => d.name)
+            .attr("y", d => d.type === "core" ? 45 : 40);
+        
+        // Click handler
+        node.on("click", function(event, d) {
+            // Update selection
+            d3.selectAll(".node circle").classed("selected", false);
+            d3.select(this).select("circle").classed("selected", true);
+            
+            // Update sidebar
+            updateSidebar(d);
+        });
+        
+        // Update positions
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+            
+            linkLabels
+                .attr("x", d => (d.source.x + d.target.x) / 2)
+                .attr("y", d => (d.source.y + d.target.y) / 2);
+            
+            node
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+        
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        
+        // Update sidebar
+        function updateSidebar(character) {
+            const info = document.getElementById("info");
+            
+            let html = `
+                <div class="info-box">
+                    <h2>${character.name.replace(/\n/g, ' ')}</h2>
+                    <div class="truth-box">
+                        <h3>Truth</h3>
+                        <p>${character.truth}</p>
+                    </div>
+                    <div class="belief-box">
+                        <h3>What They Believe</h3>
+                        <ul>
+                            ${character.beliefs.map(b => `<li>${b}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            
+            // Add relationships
+            const relationships = links.filter(l => l.source.id === character.id || l.target.id === character.id);
+            if (relationships.length > 0) {
+                html += `
+                    <div class="theme-box">
+                        <h3>Relationships</h3>
+                        <ul>
+                            ${relationships.map(r => {
+                                if (r.source.id === character.id) {
+                                    return `<li>${r.label} ${r.target.name.replace(/\n/g, ' ')}</li>`;
+                                } else {
+                                    return `<li>${r.source.name.replace(/\n/g, ' ')} ${r.label} them</li>`;
+                                }
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            
+            // Add relevant themes
+            if (character.id === "bruce" || character.id === "mongoose") {
+                html += `
+                    <div class="theme-box">
+                        <h3>Central Themes</h3>
+                        <ul>
+                            <li><strong>Identity vs Truth:</strong> The cost of maintaining necessary lies</li>
+                            <li><strong>Heroism:</strong> "The greater hero is usually the one who's less immune to bullets"</li>
+                            <li><strong>Sacrifice:</strong> Bruce can't form real relationships</li>
+                            <li><strong>Protection:</strong> The deception protects innocent family members</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            info.innerHTML = html;
+        }
+        
+        // Control functions
+        function resetZoom() {
+            svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+        }
+        
+        let labelsVisible = true;
+        function toggleLabels() {
+            labelsVisible = !labelsVisible;
+            linkLabels.style("display", labelsVisible ? "block" : "none");
+        }
+        
+        // Initial selection
+        updateSidebar(nodes.find(n => n.id === "bruce"));
+    </script>
+</body>
+</html>

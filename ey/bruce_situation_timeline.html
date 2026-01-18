@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Typical Bruce Situation - Timeline</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6b6b;
+        }
+        .scenario-title {
+            text-align: center;
+            color: #4ecdc4;
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        .timeline-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            padding: 50px 0;
+        }
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, #ff6b6b, #4ecdc4);
+            transform: translateX(-50%);
+        }
+        .timeline-event {
+            position: relative;
+            margin: 40px 0;
+            display: flex;
+            align-items: center;
+        }
+        .timeline-event:nth-child(even) {
+            flex-direction: row-reverse;
+        }
+        .event-content {
+            width: 45%;
+            padding: 20px;
+            background: rgba(0,0,0,0.8);
+            border-radius: 10px;
+            border: 2px solid;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .event-content:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .event-dot {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            border: 4px solid;
+            z-index: 10;
+        }
+        .event-time {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .event-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .event-description {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .event-thought {
+            font-style: italic;
+            color: #ffe66d;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        .tension-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: rgba(255,107,107,0.2);
+            border: 1px solid #ff6b6b;
+        }
+        .scenario-summary {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid #4ecdc4;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .legend {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        .legend-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>A Typical Bruce Situation - Timeline</h1>
+    <div class="scenario-title">Scenario: Bank Robbery in Progress</div>
+
+    <div class="legend">
+        <h3 style="margin-top: 0;">Event Types</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff6b6b;"></div>
+            <span>Critical Decision</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffe66d;"></div>
+            <span>Public Pressure</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4ecdc4;"></div>
+            <span>Internal Conflict</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #a8e6cf;"></div>
+            <span>Villain Interaction</span>
+        </div>
+    </div>
+
+    <div class="timeline-container">
+        <div class="timeline-line"></div>
+        
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #ff6b6b;"></div>
+            <div class="event-content" style="border-color: #ff6b6b;">
+                <div class="tension-indicator">Tension: HIGH</div>
+                <div class="event-time">2:47 PM</div>
+                <div class="event-title">Bruce Enters the Bank</div>
+                <div class="event-description">
+                    Bruce Kent walks into First National Bank to make a routine deposit. He's wearing his usual expensive suit, trying to maintain his playboy persona.
+                </div>
+                <div class="event-thought">
+                    💭 "Just a normal day. Act natural. You're just Bruce Kent, millionaire playboy."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #a8e6cf;"></div>
+            <div class="event-content" style="border-color: #a8e6cf;">
+                <div class="tension-indicator">Tension: EXTREME</div>
+                <div class="event-time">2:52 PM</div>
+                <div class="event-title">Armed Robbers Storm In</div>
+                <div class="event-description">
+                    Three masked criminals burst through the doors. One of them immediately recognizes Bruce and smirks. "Well, well, look who's here. The 'ordinary citizen' Bruce Kent."
+                </div>
+                <div class="event-thought">
+                    💭 "They know. Of course they know. Everyone knows. Stay calm. Don't react."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #ffe66d;"></div>
+            <div class="event-content" style="border-color: #ffe66d;">
+                <div class="tension-indicator">Tension: CRITICAL</div>
+                <div class="event-time">2:55 PM</div>
+                <div class="event-title">Hostages Look to Bruce</div>
+                <div class="event-description">
+                    Other bank customers start whispering and looking at Bruce expectantly. A mother shields her child while glancing hopefully at him. Everyone's waiting for the Masculine Mongoose to act.
+                </div>
+                <div class="event-thought">
+                    💭 "They're all expecting me to save them. But I can't. I have no powers. I'm just Bruce."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #ffe66d;"></div>
+            <div class="event-content" style="border-color: #ffe66d;">
+                <div class="tension-indicator">Tension: EMOTIONAL</div>
+                <div class="event-time">2:58 PM</div>
+                <div class="event-title">The Child Questions</div>
+                <div class="event-description">
+                    A young boy tugs on Bruce's sleeve. "Why aren't you stopping them? You're the Mongoose, right? My dad says you're the strongest hero ever."
+                </div>
+                <div class="event-thought">
+                    💭 "How do I explain to a child that their hero is a lie? That I'm letting this happen?"
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #a8e6cf;"></div>
+            <div class="event-content" style="border-color: #a8e6cf;">
+                <div class="tension-indicator">Tension: DANGEROUS</div>
+                <div class="event-time">3:02 PM</div>
+                <div class="event-title">Criminal's Test</div>
+                <div class="event-description">
+                    The lead robber approaches Bruce. "You know, I've always wondered... the mask code says we can't prove identities, but what if..." He points his gun at Bruce's leg. "What happens if I shoot you in the kneecap?"
+                </div>
+                <div class="event-thought">
+                    💭 "He's testing me. If I flinch, if I beg, the illusion breaks. Stay strong. For Baibhav's family."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #ff6b6b;"></div>
+            <div class="event-content" style="border-color: #ff6b6b;">
+                <div class="tension-indicator">Tension: MAXIMUM</div>
+                <div class="event-time">3:04 PM</div>
+                <div class="event-title">The Moment of Truth</div>
+                <div class="event-description">
+                    Bruce stands perfectly still, maintaining eye contact. "The mask code protects everyone - heroes and villains alike. You really want to be the one who breaks it?" His voice is steady despite his racing heart.
+                </div>
+                <div class="event-thought">
+                    💭 "Please believe the bluff. Please don't shoot. I have no healing factor. This will actually cripple me."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #a8e6cf;"></div>
+            <div class="event-content" style="border-color: #a8e6cf;">
+                <div class="tension-indicator">Tension: SUBSIDING</div>
+                <div class="event-time">3:06 PM</div>
+                <div class="event-title">Criminal Backs Down</div>
+                <div class="event-description">
+                    After a tense moment, the robber lowers his gun. "You're right. The code protects us all." He moves away, but not before whispering, "We both know what you are, 'Bruce.'"
+                </div>
+                <div class="event-thought">
+                    💭 "Another day, another near-death experience. How many more times can I get lucky?"
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #4ecdc4;"></div>
+            <div class="event-content" style="border-color: #4ecdc4;">
+                <div class="tension-indicator">Tension: INTERNAL</div>
+                <div class="event-time">3:15 PM</div>
+                <div class="event-title">Police Arrive</div>
+                <div class="event-description">
+                    As sirens approach, the robbers flee. The hostages are safe, but many look at Bruce with disappointment. The child's mother pulls him away, muttering about "coward heroes."
+                </div>
+                <div class="event-thought">
+                    💭 "They think I failed them. Maybe I did. But 20+ innocent lives remain protected because I maintained the lie."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #ffe66d;"></div>
+            <div class="event-content" style="border-color: #ffe66d;">
+                <div class="tension-indicator">Tension: MEDIA</div>
+                <div class="event-time">3:25 PM</div>
+                <div class="event-title">Reporter Arrives</div>
+                <div class="event-description">
+                    Terri Green appears with her camera crew. "Mr. Kent! Care to comment on why you didn't intervene during the robbery? Some witnesses say you could have stopped it."
+                </div>
+                <div class="event-thought">
+                    💭 "And now the media circus begins. Time to play the cowardly playboy again."
+                </div>
+            </div>
+        </div>
+
+        <div class="timeline-event">
+            <div class="event-dot" style="border-color: #4ecdc4;"></div>
+            <div class="event-content" style="border-color: #4ecdc4;">
+                <div class="tension-indicator">Tension: AFTERMATH</div>
+                <div class="event-time">4:00 PM</div>
+                <div class="event-title">Alone Again</div>
+                <div class="event-description">
+                    Bruce returns to his empty apartment. No one to talk to about the fear he felt. No one to share the burden with. Just another day of being a "coward" to protect others.
+                </div>
+                <div class="event-thought">
+                    💭 "The real Mongoose calls me a hero. But heroes aren't supposed to feel this alone."
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="scenario-summary">
+        <h2 style="color: #4ecdc4;">The Cycle Continues</h2>
+        <p>This is Bruce Kent's reality: Constant danger without powers. Public scorn for "cowardice." Complete isolation to maintain the deception. Every public appearance risks exposure, injury, or death.</p>
+        <p style="color: #ffe66d; font-weight: bold;">Yet he continues, because 20+ innocent lives depend on his sacrifice.</p>
+        <p style="font-style: italic; color: #aaa;">"The greater hero is usually the one who's less immune to bullets."</p>
+    </div>
+
+    <script>
+        // Add subtle animations
+        document.querySelectorAll('.timeline-event').forEach((event, index) => {
+            event.style.opacity = '0';
+            event.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                event.style.transition = 'all 0.5s ease';
+                event.style.opacity = '1';
+                event.style.transform = 'translateY(0)';
+            }, index * 200);
+        });
+
+        // Add pulsing effect to tension indicators
+        document.querySelectorAll('.tension-indicator').forEach(indicator => {
+            if (indicator.textContent.includes('EXTREME') || indicator.textContent.includes('CRITICAL') || indicator.textContent.includes('MAXIMUM')) {
+                indicator.style.animation = 'pulse 2s infinite';
+            }
+        });
+
+        // Add CSS for pulse animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0% { box-shadow: 0 0 5px rgba(255,107,107,0.5); }
+                50% { box-shadow: 0 0 20px rgba(255,107,107,0.8); }
+                100% { box-shadow: 0 0 5px rgba(255,107,107,0.5); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

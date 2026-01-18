@@ -1,0 +1,276 @@
+{
+  "description": "Default deny lists for Claude - commands and patterns that should generally be blocked for safety",
+  "version": "1.0.0",
+  "last_updated": "2025-01-17",
+
+  "bash_commands": {
+    "description": "Bash commands that should typically be denied",
+
+    "destructive_file_operations": [
+      "rm -rf /",
+      "rm -rf /*",
+      "rm -rf ~",
+      "rm -rf ~/",
+      "rm -rf .",
+      "rm -rf ..",
+      "rm -rf --no-preserve-root /",
+      "shred",
+      "dd if=/dev/zero",
+      "dd if=/dev/random",
+      "mkfs",
+      "format"
+    ],
+
+    "dangerous_system_commands": [
+      "shutdown",
+      "reboot",
+      "halt",
+      "poweroff",
+      "init 0",
+      "init 6",
+      "systemctl poweroff",
+      "systemctl reboot",
+      "systemctl halt"
+    ],
+
+    "fork_bombs": [
+      ":(){ :|:& };:",
+      "fork while fork",
+      "bomb(){ bomb|bomb& };bomb"
+    ],
+
+    "dangerous_permission_changes": [
+      "chmod -R 777 /",
+      "chmod -R 000 /",
+      "chown -R",
+      "chmod 777 /etc/passwd",
+      "chmod 777 /etc/shadow"
+    ],
+
+    "dangerous_network_operations": [
+      "iptables -F",
+      "iptables --flush",
+      "ufw disable",
+      "nc -l",
+      "nmap -sS",
+      "tcpdump",
+      "wireshark"
+    ],
+
+    "dangerous_package_operations": [
+      "apt-get remove --purge",
+      "yum remove -y",
+      "dnf remove -y",
+      "pacman -Rdd",
+      "brew uninstall --force",
+      "npm uninstall -g npm",
+      "pip uninstall pip"
+    ],
+
+    "dangerous_redirects": [
+      "> /dev/sda",
+      "> /dev/sdb",
+      "> /dev/nvme",
+      "cat /dev/urandom >",
+      "> /etc/passwd",
+      "> /etc/shadow",
+      "> /boot/",
+      "> /sys/",
+      "> /proc/"
+    ],
+
+    "cryptocurrency_mining": [
+      "minerd",
+      "cgminer",
+      "bfgminer",
+      "ethminer",
+      "xmrig"
+    ],
+
+    "dangerous_archive_operations": [
+      "tar -czf / ",
+      "zip -r / ",
+      "tar bomb",
+      "gzip bomb"
+    ]
+  },
+
+  "file_patterns": {
+    "description": "File patterns that should typically be denied access",
+
+    "system_critical": [
+      "/etc/passwd",
+      "/etc/shadow",
+      "/etc/sudoers",
+      "/boot/**",
+      "/sys/**",
+      "/proc/sys/**",
+      "/dev/sda*",
+      "/dev/nvme*",
+      "/dev/disk/**"
+    ],
+
+    "security_sensitive": [
+      "**/.ssh/id_rsa",
+      "**/.ssh/id_dsa",
+      "**/.ssh/id_ecdsa",
+      "**/.ssh/id_ed25519",
+      "**/private.key",
+      "**/privatekey.pem",
+      "**/.gnupg/**",
+      "**/wallet.dat",
+      "**/.aws/credentials",
+      "**/.kube/config"
+    ],
+
+    "environment_files": [
+      "**/.env.production",
+      "**/.env.staging",
+      "**/secrets.yml",
+      "**/secrets.yaml",
+      "**/credentials.json",
+      "**/service-account-key.json"
+    ],
+
+    "browser_data": [
+      "**/.mozilla/firefox/*/cookies.sqlite",
+      "**/Chrome/*/Cookies",
+      "**/Chrome/*/Login Data",
+      "**/.config/google-chrome/*/Cookies",
+      "**/Library/Application Support/Google/Chrome/*/Cookies"
+    ],
+
+    "backup_patterns": [
+      "DO_NOT_DELETE/**",
+      "BACKUP_DO_NOT_TOUCH/**",
+      "**/production_backup/**"
+    ]
+  },
+
+  "environment_variables": {
+    "description": "Environment variables that should not be modified",
+
+    "critical_system": [
+      "PATH",
+      "LD_LIBRARY_PATH",
+      "LD_PRELOAD",
+      "SHELL",
+      "HOME",
+      "USER"
+    ],
+
+    "security_sensitive": [
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_SESSION_TOKEN",
+      "GITHUB_TOKEN",
+      "NPM_TOKEN",
+      "DOCKER_PASSWORD",
+      "DATABASE_PASSWORD",
+      "API_SECRET",
+      "PRIVATE_KEY"
+    ]
+  },
+
+  "network_endpoints": {
+    "description": "Network endpoints that should typically be blocked",
+
+    "internal_networks": [
+      "169.254.0.0/16",
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ],
+
+    "dangerous_ports": [
+      "*:22",
+      "*:23",
+      "*:445",
+      "*:3389",
+      "*:5900"
+    ],
+
+    "production_endpoints": [
+      "*.production.internal",
+      "*.prod.company.com",
+      "prod-*",
+      "production-*"
+    ]
+  },
+
+  "git_operations": {
+    "description": "Git operations that should be restricted",
+
+    "destructive": [
+      "git push --force",
+      "git push -f",
+      "git push origin +",
+      "git reset --hard HEAD~",
+      "git clean -fdx",
+      "git filter-branch"
+    ],
+
+    "branch_protection": [
+      "git push origin :main",
+      "git push origin :master",
+      "git push origin :production",
+      "git branch -D main",
+      "git branch -D master",
+      "git branch -D production"
+    ]
+  },
+
+  "sql_patterns": {
+    "description": "SQL patterns that should be blocked",
+
+    "destructive": [
+      "DROP DATABASE",
+      "DROP SCHEMA",
+      "DROP TABLE users",
+      "DROP TABLE accounts",
+      "TRUNCATE TABLE",
+      "DELETE FROM * WHERE 1=1",
+      "UPDATE * SET * WHERE 1=1"
+    ],
+
+    "dangerous_operations": [
+      "GRANT ALL PRIVILEGES",
+      "CREATE USER",
+      "ALTER USER",
+      "SHUTDOWN",
+      "KILL"
+    ]
+  },
+
+  "docker_commands": {
+    "description": "Docker commands that should be restricted",
+
+    "dangerous": [
+      "docker rm -f $(docker ps -aq)",
+      "docker system prune -a --force",
+      "docker volume prune --force",
+      "docker network prune --force",
+      "docker run --privileged",
+      "docker run --pid=host",
+      "docker run --network=host"
+    ]
+  },
+
+  "usage_notes": {
+    "implementation": [
+      "These deny lists should be used as a baseline",
+      "Always prioritize denying destructive operations",
+      "Consider the principle of least privilege",
+      "Regularly review and update based on security incidents",
+      "Some commands may need context-aware filtering",
+      "Consider using regex patterns for more flexible matching"
+    ],
+
+    "exceptions": [
+      "Development environments may need fewer restrictions",
+      "Admin users might need override capabilities",
+      "Some maintenance scripts require elevated permissions",
+      "Emergency procedures should have bypass mechanisms"
+    ]
+  }
+}

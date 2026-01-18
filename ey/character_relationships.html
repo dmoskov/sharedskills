@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Masculine Mongoose - Character Relationship Network</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            text-align: center;
+            color: #ff6b6b;
+        }
+        #network {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #333;
+            background-color: #0a0a0a;
+        }
+        .node {
+            cursor: pointer;
+        }
+        .node circle {
+            stroke-width: 3px;
+        }
+        .node text {
+            font-size: 12px;
+            fill: #fff;
+            pointer-events: none;
+        }
+        .link {
+            fill: none;
+            stroke-width: 2px;
+        }
+        .link-label {
+            font-size: 10px;
+            fill: #aaa;
+        }
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+        .legend-item {
+            margin: 5px 0;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            vertical-align: middle;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>The Masculine Mongoose - Character Relationship Network</h1>
+    <div id="network"></div>
+    <div class="legend">
+        <h3>Legend</h3>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #ff6b6b"></span>
+            Core Deception
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #4ecdc4"></span>
+            Protected Family
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #ffe66d"></span>
+            Public/Media
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #a8e6cf"></span>
+            Villains
+        </div>
+        <div class="legend-item">
+            <span class="legend-color" style="background: #ff8b94"></span>
+            Personal Relations
+        </div>
+    </div>
+
+    <script>
+        const width = document.getElementById('network').clientWidth;
+        const height = 600;
+
+        const svg = d3.select("#network")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        // Define the nodes
+        const nodes = [
+            // Core deception
+            {id: "bruce", name: "Bruce Kent\n(The Decoy)", group: "core", x: width/2, y: height/2},
+            {id: "mongoose", name: "The Real\nMasculine Mongoose\n(Baibhav Hegadi)", group: "core", x: width/2 - 200, y: height/2},
+            
+            // Protected family
+            {id: "spouse", name: "Mongoose's\nSpouse", group: "family", x: width/2 - 350, y: height/2 - 100},
+            {id: "kids", name: "3 Kids", group: "family", x: width/2 - 350, y: height/2},
+            {id: "siblings", name: "Siblings", group: "family", x: width/2 - 350, y: height/2 + 100},
+            {id: "nieces", name: "16 Nieces/\nNephews", group: "family", x: width/2 - 300, y: height/2 + 180},
+            
+            // Public/Media
+            {id: "public", name: "The Public", group: "public", x: width/2 + 200, y: height/2},
+            {id: "reporter", name: "Terri Green\n(Reporter)", group: "public", x: width/2 + 150, y: height/2 - 150},
+            {id: "child", name: "Bank Child", group: "public", x: width/2 + 100, y: height/2 + 150},
+            
+            // Villains
+            {id: "pyro", name: "Professor\nPyrofessor", group: "villain", x: width/2 + 250, y: height/2 - 80},
+            {id: "gunman", name: "Smart Guy\nWith A Gun", group: "villain", x: width/2 + 250, y: height/2 + 80},
+            
+            // Personal
+            {id: "date", name: "Bruce's Date", group: "personal", x: width/2, y: height/2 - 180}
+        ];
+
+        // Define the links
+        const links = [
+            {source: "mongoose", target: "bruce", label: "Protects identity through", type: "protection"},
+            {source: "bruce", target: "public", label: "Pretends to be hero for", type: "deception"},
+            {source: "public", target: "bruce", label: "Believes is Mongoose", type: "belief"},
+            {source: "mongoose", target: "spouse", label: "Married to", type: "family"},
+            {source: "mongoose", target: "kids", label: "Parent of", type: "family"},
+            {source: "mongoose", target: "siblings", label: "Sibling of", type: "family"},
+            {source: "siblings", target: "nieces", label: "Parents of", type: "family"},
+            {source: "reporter", target: "bruce", label: "Witnessed assassination attempt", type: "observation"},
+            {source: "child", target: "bruce", label: "Questions heroism", type: "expectation"},
+            {source: "pyro", target: "bruce", label: "Tests mask code", type: "conflict"},
+            {source: "gunman", target: "bruce", label: "Tries to expose", type: "conflict"},
+            {source: "date", target: "bruce", label: "Attempts relationship", type: "personal"},
+            {source: "bruce", target: "date", label: "Can't be honest with", type: "sacrifice"}
+        ];
+
+        // Color scale for groups
+        const color = d3.scaleOrdinal()
+            .domain(["core", "family", "public", "villain", "personal"])
+            .range(["#ff6b6b", "#4ecdc4", "#ffe66d", "#a8e6cf", "#ff8b94"]);
+
+        // Create force simulation
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("x", d3.forceX(d => d.x).strength(0.1))
+            .force("y", d3.forceY(d => d.y).strength(0.1));
+
+        // Create arrow markers for directed edges
+        svg.append("defs").selectAll("marker")
+            .data(["protection", "deception", "belief", "family", "observation", "expectation", "conflict", "personal", "sacrifice"])
+            .enter().append("marker")
+            .attr("id", d => `arrow-${d}`)
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 25)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,-5L10,0L0,5")
+            .attr("fill", d => {
+                const typeColors = {
+                    protection: "#4ecdc4",
+                    deception: "#ff6b6b",
+                    belief: "#ffe66d",
+                    family: "#4ecdc4",
+                    observation: "#ffe66d",
+                    expectation: "#ffe66d",
+                    conflict: "#a8e6cf",
+                    personal: "#ff8b94",
+                    sacrifice: "#ff8b94"
+                };
+                return typeColors[d];
+            });
+
+        // Add links
+        const link = svg.append("g")
+            .selectAll("line")
+            .data(links)
+            .enter().append("line")
+            .attr("class", "link")
+            .attr("stroke", d => {
+                const typeColors = {
+                    protection: "#4ecdc4",
+                    deception: "#ff6b6b",
+                    belief: "#ffe66d",
+                    family: "#4ecdc4",
+                    observation: "#ffe66d",
+                    expectation: "#ffe66d",
+                    conflict: "#a8e6cf",
+                    personal: "#ff8b94",
+                    sacrifice: "#ff8b94"
+                };
+                return typeColors[d.type];
+            })
+            .attr("marker-end", d => `url(#arrow-${d.type})`);
+
+        // Add link labels
+        const linkLabel = svg.append("g")
+            .selectAll("text")
+            .data(links)
+            .enter().append("text")
+            .attr("class", "link-label")
+            .text(d => d.label);
+
+        // Add nodes
+        const node = svg.append("g")
+            .selectAll("g")
+            .data(nodes)
+            .enter().append("g")
+            .attr("class", "node")
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        node.append("circle")
+            .attr("r", d => d.group === "core" ? 30 : 20)
+            .attr("fill", d => color(d.group))
+            .attr("stroke", "#fff");
+
+        node.append("text")
+            .text(d => d.name)
+            .attr("text-anchor", "middle")
+            .attr("dy", ".35em")
+            .style("font-size", d => d.group === "core" ? "14px" : "10px")
+            .call(wrap, 60);
+
+        // Update positions
+        simulation.on("tick", () => {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            linkLabel
+                .attr("x", d => (d.source.x + d.target.x) / 2)
+                .attr("y", d => (d.source.y + d.target.y) / 2);
+
+            node
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        // Drag functions
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        // Text wrapping function
+        function wrap(text, width) {
+            text.each(function() {
+                const text = d3.select(this);
+                const words = text.text().split(/\s+|\\n/).reverse();
+                let word;
+                let line = [];
+                let lineNumber = 0;
+                const lineHeight = 1.1;
+                const y = text.attr("y");
+                const dy = parseFloat(text.attr("dy"));
+                let tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
+
+                while (word = words.pop()) {
+                    if (word === "") continue;
+                    line.push(word);
+                    tspan.text(line.join(" "));
+                    if (tspan.node().getComputedTextLength() > width) {
+                        line.pop();
+                        tspan.text(line.join(" "));
+                        line = [word];
+                        tspan = text.append("tspan").attr("x", 0).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

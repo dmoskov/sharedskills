@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Idea Generator - Masculine Mongoose Universe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            background: #1a1a1a;
+            border-radius: 10px;
+            padding: 25px;
+            border: 1px solid #333;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            color: #4ecdc4;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            color: #a0a0a0;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        select, input[type="range"], button {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            padding: 5px;
+        }
+
+        .range-value {
+            text-align: center;
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+
+        button {
+            background: linear-gradient(135deg, #ff6b6b, #e74c3c);
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 15px;
+            font-size: 18px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .story-output {
+            min-height: 300px;
+        }
+
+        .story-card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .story-title {
+            font-size: 1.3em;
+            color: #ffe66d;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .story-premise {
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .story-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .meta-item {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #333;
+        }
+
+        .meta-label {
+            color: #888;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .meta-value {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+
+        .belief-connections {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+
+        .belief-tag {
+            display: inline-block;
+            background: #333;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin: 5px 5px 5px 0;
+            font-size: 0.9em;
+            border: 1px solid #444;
+        }
+
+        .tension-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .tension-high { background: #ff6b6b; }
+        .tension-medium { background: #ffe66d; }
+        .tension-low { background: #4ecdc4; }
+
+        #storyHistory {
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        #storyHistory::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #storyHistory::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        #storyHistory::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+
+        #storyHistory::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Story Idea Generator</h1>
+        
+        <div class="main-grid">
+            <div class="section">
+                <h2>Story Parameters</h2>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="storyType">Story Type</label>
+                        <select id="storyType">
+                            <option value="revelation">Truth Revelation</option>
+                            <option value="identity">Identity Crisis</option>
+                            <option value="relationship">Relationship Test</option>
+                            <option value="threat">External Threat</option>
+                            <option value="moral">Moral Dilemma</option>
+                            <option value="discovery">Discovery & Investigation</option>
+                            <option value="betrayal">Betrayal & Trust</option>
+                            <option value="sacrifice">Sacrifice & Loss</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="focusCharacter">Focus Character</label>
+                        <select id="focusCharacter">
+                            <option value="any">Any Character</option>
+                            <option value="bruce">Bruce Kent</option>
+                            <option value="mongoose">Masculine Mongoose</option>
+                            <option value="margaret">Margaret Marquez</option>
+                            <option value="lily">Lily Chen</option>
+                            <option value="victor">Victor Vega</option>
+                            <option value="sarah">Sarah Chen</option>
+                            <option value="jamie">Jamie Chen</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="tensionLevel">Tension Level</label>
+                        <input type="range" id="tensionLevel" min="1" max="10" value="5">
+                        <div class="range-value" id="tensionValue">5</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="complexity">Story Complexity</label>
+                        <select id="complexity">
+                            <option value="simple">Simple (1-2 conflicts)</option>
+                            <option value="moderate">Moderate (3-4 conflicts)</option>
+                            <option value="complex">Complex (5+ conflicts)</option>
+                        </select>
+                    </div>
+
+                    <button onclick="generateStory()">Generate Story Idea</button>
+                </div>
+            </div>
+
+            <div class="section story-output">
+                <h2>Generated Stories</h2>
+                <div id="storyHistory"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Character and relationship data
+        const characters = {
+            bruce: {
+                name: "Bruce Kent",
+                type: "core",
+                truth: "Volunteer decoy pretending to be millionaire playboy",
+                beliefs: [
+                    "His job protects the Mongoose's family",
+                    "He's not a real hero",
+                    "The deception isolates him"
+                ],
+                relationships: ["mongoose", "margaret", "lily", "victor"]
+            },
+            mongoose: {
+                name: "Masculine Mongoose",
+                type: "core",
+                truth: "Family man who works night shifts at recycling plant",
+                beliefs: [
+                    "Someone needs to keep the streets safe",
+                    "His family must never know",
+                    "Bruce's sacrifice allows him to be with his kids"
+                ],
+                relationships: ["bruce", "sarah", "jamie", "victor"]
+            },
+            margaret: {
+                name: "Margaret Marquez",
+                type: "media",
+                truth: "Knows Bruce isn't really the Mongoose",
+                beliefs: [
+                    "Bruce deserves recognition",
+                    "The truth would destroy both men",
+                    "Sometimes the story matters more than facts"
+                ],
+                relationships: ["bruce", "lily"]
+            },
+            lily: {
+                name: "Lily Chen",
+                type: "media",
+                truth: "Investigating the truth about Mongoose",
+                beliefs: [
+                    "There's more to Bruce Kent",
+                    "The public deserves the truth",
+                    "Heroes shouldn't hide"
+                ],
+                relationships: ["bruce", "margaret", "sarah"]
+            },
+            victor: {
+                name: "Victor Vega",
+                type: "villain",
+                truth: "Knows both identities, uses knowledge for control",
+                beliefs: [
+                    "Information is power",
+                    "Everyone has a price",
+                    "The city needs order, not heroes"
+                ],
+                relationships: ["bruce", "mongoose"]
+            },
+            sarah: {
+                name: "Sarah Chen",
+                type: "family",
+                truth: "Suspects her husband is hiding something",
+                beliefs: [
+                    "Her husband works too many night shifts",
+                    "Something doesn't add up",
+                    "Family comes first"
+                ],
+                relationships: ["mongoose", "jamie", "lily"]
+            },
+            jamie: {
+                name: "Jamie Chen",
+                type: "family",
+                truth: "Child who idolizes the Mongoose",
+                beliefs: [
+                    "The Mongoose is the coolest hero",
+                    "Dad is always tired from work",
+                    "Heroes are larger than life"
+                ],
+                relationships: ["mongoose", "sarah"]
+            }
+        };
+
+        // Story templates based on type
+        const storyTemplates = {
+            revelation: [
+                {
+                    title: "The Photograph",
+                    premise: "{character1} discovers evidence that could expose the truth about {character2}. They must decide whether to pursue it or protect the secret.",
+                    conflicts: ["truth vs protection", "loyalty vs justice", "personal gain vs greater good"]
+                },
+                {
+                    title: "Slip of the Tongue",
+                    premise: "During a tense moment, {character1} accidentally reveals knowledge they shouldn't have about {character2}, forcing both to confront what they know.",
+                    conflicts: ["trust vs suspicion", "maintaining cover vs honesty", "damage control vs coming clean"]
+                }
+            ],
+            identity: [
+                {
+                    title: "Mirror's Edge",
+                    premise: "{character1} begins to lose track of where their false identity ends and their true self begins, leading to dangerous mistakes.",
+                    conflicts: ["authentic self vs performance", "duty vs desire", "public image vs private truth"]
+                },
+                {
+                    title: "The Impostor",
+                    premise: "A new player claims to be the real {character2}, forcing {character1} to defend an identity that isn't even theirs.",
+                    conflicts: ["defending lies vs exposing truth", "protecting others vs self-preservation", "legitimacy vs necessity"]
+                }
+            ],
+            relationship: [
+                {
+                    title: "The Test of Trust",
+                    premise: "{character1} must choose between protecting {character2} or saving someone else they care about, with no perfect solution.",
+                    conflicts: ["competing loyalties", "sacrifice vs self-interest", "immediate vs long-term consequences"]
+                },
+                {
+                    title: "Unspoken Words",
+                    premise: "{character1} desperately wants to tell {character2} the truth but knows it would destroy everything they've built together.",
+                    conflicts: ["honesty vs protection", "burden of secrets", "love vs duty"]
+                }
+            ],
+            threat: [
+                {
+                    title: "The Hunter",
+                    premise: "A new villain specifically targets {character1}'s weakness, forcing them to rely on {character2} in ways that risk exposure.",
+                    conflicts: ["independence vs cooperation", "maintaining cover vs survival", "calculated risks vs reckless action"]
+                },
+                {
+                    title: "Collateral Damage",
+                    premise: "An attack on the city puts {character1}'s loved ones in danger, but saving them would mean breaking character.",
+                    conflicts: ["role vs reality", "public duty vs private obligation", "heroism vs humanity"]
+                }
+            ],
+            moral: [
+                {
+                    title: "The Greater Good",
+                    premise: "{character1} must decide whether to let an innocent person suffer to maintain the deception that protects many.",
+                    conflicts: ["individual vs collective good", "short-term pain vs long-term benefit", "moral absolutism vs pragmatism"]
+                },
+                {
+                    title: "Blood on Their Hands",
+                    premise: "{character1}'s actions indirectly cause harm to {character2}, forcing them to question if the lie is worth the cost.",
+                    conflicts: ["intention vs outcome", "responsibility vs blame", "continuing vs stopping"]
+                }
+            ],
+            discovery: [
+                {
+                    title: "Paper Trail",
+                    premise: "{character1} uncovers a connection between {character2} and an unexpected part of the city's underworld.",
+                    conflicts: ["digging deeper vs leaving alone", "professional duty vs personal safety", "exposure vs blackmail"]
+                },
+                {
+                    title: "The Pattern",
+                    premise: "{character1} notices inconsistencies in {character2}'s behavior that point to a larger conspiracy.",
+                    conflicts: ["paranoia vs intuition", "evidence vs assumption", "investigation vs accusation"]
+                }
+            ],
+            betrayal: [
+                {
+                    title: "The Double Cross",
+                    premise: "{character1} discovers {character2} has been playing both sides, but exposing them would destroy everything.",
+                    conflicts: ["revenge vs strategy", "emotion vs logic", "trust vs verification"]
+                },
+                {
+                    title: "Broken Promises",
+                    premise: "{character1} must break a sacred promise to {character2} to prevent a greater catastrophe.",
+                    conflicts: ["honor vs necessity", "personal code vs situational ethics", "forgiveness vs consequence"]
+                }
+            ],
+            sacrifice: [
+                {
+                    title: "The Price of Heroes",
+                    premise: "{character1} must give up something precious to maintain the illusion that protects {character2}.",
+                    conflicts: ["personal loss vs others' gain", "visible vs invisible sacrifice", "resentment vs acceptance"]
+                },
+                {
+                    title: "Last Stand",
+                    premise: "{character1} faces a situation where revealing the truth is the only way to save {character2}, but it would end everything.",
+                    conflicts: ["preservation vs revelation", "living a lie vs dying with truth", "legacy vs life"]
+                }
+            ]
+        };
+
+        // Belief connections for different story types
+        const beliefConnections = {
+            revelation: ["The truth would destroy both men", "The public deserves the truth", "Sometimes the story matters more than facts"],
+            identity: ["He's not a real hero", "The deception isolates him", "Heroes shouldn't hide"],
+            relationship: ["His job protects the Mongoose's family", "Bruce's sacrifice allows him to be with his kids", "Family comes first"],
+            threat: ["Someone needs to keep the streets safe", "The city needs order, not heroes", "Everyone has a price"],
+            moral: ["Bruce deserves recognition", "His family must never know", "Information is power"],
+            discovery: ["There's more to Bruce Kent", "Something doesn't add up", "Knows both identities"],
+            betrayal: ["Sometimes the story matters more than facts", "Everyone has a price", "Trust is earned"],
+            sacrifice: ["His job protects the Mongoose's family", "Bruce's sacrifice allows him to be with his kids", "Heroes are larger than life"]
+        };
+
+        // Update tension value display
+        document.getElementById('tensionLevel').addEventListener('input', function(e) {
+            document.getElementById('tensionValue').textContent = e.target.value;
+        });
+
+        // Story generation function
+        function generateStory() {
+            const storyType = document.getElementById('storyType').value;
+            const focusCharacter = document.getElementById('focusCharacter').value;
+            const tensionLevel = parseInt(document.getElementById('tensionLevel').value);
+            const complexity = document.getElementById('complexity').value;
+
+            // Select characters for the story
+            const availableCharacters = Object.keys(characters);
+            let char1, char2;
+
+            if (focusCharacter === 'any') {
+                char1 = availableCharacters[Math.floor(Math.random() * availableCharacters.length)];
+            } else {
+                char1 = focusCharacter;
+            }
+
+            // Select second character from relationships
+            const relationships = characters[char1].relationships;
+            char2 = relationships[Math.floor(Math.random() * relationships.length)];
+
+            // Select story template
+            const templates = storyTemplates[storyType];
+            const template = templates[Math.floor(Math.random() * templates.length)];
+
+            // Generate story
+            const story = {
+                title: template.title,
+                premise: template.premise
+                    .replace('{character1}', characters[char1].name)
+                    .replace('{character2}', characters[char2].name),
+                type: storyType,
+                characters: [characters[char1].name, characters[char2].name],
+                tensionLevel: tensionLevel,
+                complexity: complexity,
+                conflicts: selectConflicts(template.conflicts, complexity),
+                beliefs: selectBeliefs(storyType, char1, char2),
+                timestamp: new Date().toLocaleTimeString()
+            };
+
+            // Display the story
+            displayStory(story);
+        }
+
+        function selectConflicts(conflicts, complexity) {
+            const count = complexity === 'simple' ? 2 : complexity === 'moderate' ? 3 : conflicts.length;
+            return conflicts.slice(0, count);
+        }
+
+        function selectBeliefs(storyType, char1, char2) {
+            const beliefs = [];
+            
+            // Add relevant beliefs from characters
+            const char1Beliefs = characters[char1].beliefs;
+            const char2Beliefs = characters[char2].beliefs;
+            
+            beliefs.push(char1Beliefs[Math.floor(Math.random() * char1Beliefs.length)]);
+            beliefs.push(char2Beliefs[Math.floor(Math.random() * char2Beliefs.length)]);
+            
+            // Add thematic beliefs
+            const thematicBeliefs = beliefConnections[storyType];
+            beliefs.push(thematicBeliefs[Math.floor(Math.random() * thematicBeliefs.length)]);
+            
+            return [...new Set(beliefs)]; // Remove duplicates
+        }
+
+        function displayStory(story) {
+            const storyCard = document.createElement('div');
+            storyCard.className = 'story-card';
+            
+            const tensionClass = story.tensionLevel > 7 ? 'tension-high' : 
+                               story.tensionLevel > 4 ? 'tension-medium' : 'tension-low';
+            
+            storyCard.innerHTML = `
+                <div class="story-title">${story.title}</div>
+                <div class="story-premise">${story.premise}</div>
+                
+                <div class="story-meta">
+                    <div class="meta-item">
+                        <div class="meta-label">Story Type</div>
+                        <div class="meta-value">${story.type.charAt(0).toUpperCase() + story.type.slice(1)}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Tension Level</div>
+                        <div class="meta-value">
+                            <span class="tension-indicator ${tensionClass}"></span>
+                            ${story.tensionLevel}/10
+                        </div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Characters</div>
+                        <div class="meta-value">${story.characters.join(' & ')}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Complexity</div>
+                        <div class="meta-value">${story.complexity.charAt(0).toUpperCase() + story.complexity.slice(1)}</div>
+                    </div>
+                </div>
+                
+                <div class="belief-connections">
+                    <div class="meta-label">Core Conflicts</div>
+                    ${story.conflicts.map(conflict => `<span class="belief-tag">${conflict}</span>`).join('')}
+                </div>
+                
+                <div class="belief-connections">
+                    <div class="meta-label">Connected Beliefs</div>
+                    ${story.beliefs.map(belief => `<span class="belief-tag">${belief}</span>`).join('')}
+                </div>
+            `;
+            
+            const historyContainer = document.getElementById('storyHistory');
+            historyContainer.insertBefore(storyCard, historyContainer.firstChild);
+            
+            // Keep only last 10 stories
+            while (historyContainer.children.length > 10) {
+                historyContainer.removeChild(historyContainer.lastChild);
+            }
+        }
+
+        // Generate initial story on load
+        window.onload = function() {
+            generateStory();
+        };
+    </script>
+</body>
+</html>

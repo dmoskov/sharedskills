@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story Ideas - The Masculine Mongoose</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 36px;
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+        .header p {
+            font-size: 18px;
+            color: #ccc;
+        }
+        .sort-info {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #ffe66d;
+            font-size: 14px;
+        }
+        .table-container {
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #333;
+            margin-bottom: 40px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background: #252525;
+            border-bottom: 2px solid #444;
+        }
+        th {
+            padding: 20px 15px;
+            text-align: left;
+            font-weight: bold;
+            color: #ffe66d;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        th.rating-col {
+            text-align: center;
+            width: 100px;
+        }
+        tbody tr {
+            border-bottom: 1px solid #333;
+            transition: all 0.3s ease;
+        }
+        tbody tr:hover {
+            background: rgba(255, 107, 107, 0.1);
+        }
+        td {
+            padding: 20px 15px;
+            vertical-align: top;
+        }
+        .story-number {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background: #ff6b6b;
+            color: #000;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 50%;
+            font-weight: bold;
+        }
+        .story-title {
+            font-size: 18px;
+            color: #4ecdc4;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .story-premise {
+            font-size: 14px;
+            color: #ddd;
+            line-height: 1.5;
+        }
+        .tags-cell {
+            font-size: 12px;
+        }
+        .tension-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            margin: 2px;
+            background: rgba(255,107,107,0.2);
+            border: 1px solid #ff6b6b;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #ff6b6b;
+        }
+        .relationship-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            margin: 2px;
+            background: rgba(78,205,196,0.2);
+            border: 1px solid #4ecdc4;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #4ecdc4;
+        }
+        .conflict-cell {
+            font-size: 13px;
+            color: #ccc;
+            line-height: 1.4;
+        }
+        .rating-cell {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .rating-high {
+            color: #ff6b6b;
+        }
+        .rating-medium {
+            color: #ffe66d;
+        }
+        .rating-low {
+            color: #4ecdc4;
+        }
+        .rating-stars {
+            font-size: 14px;
+            color: #666;
+            display: block;
+            margin-top: 4px;
+        }
+        @media (max-width: 1200px) {
+            th, td {
+                padding: 15px 10px;
+            }
+            .story-title {
+                font-size: 16px;
+            }
+            .story-premise {
+                font-size: 13px;
+            }
+        }
+        @media (max-width: 768px) {
+            .table-container {
+                overflow-x: auto;
+            }
+            table {
+                min-width: 800px;
+            }
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .modal-overlay.active {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+        .modal-content {
+            background: #1a1a1a;
+            border: 2px solid #ff6b6b;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 100%;
+            margin: 40px auto;
+            position: relative;
+            animation: modalFadeIn 0.3s ease;
+        }
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .modal-header {
+            padding: 30px;
+            border-bottom: 1px solid #333;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: #ff6b6b;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        .modal-close:hover {
+            transform: rotate(90deg);
+            background: #ff5252;
+        }
+        .modal-title {
+            font-size: 32px;
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            padding-right: 60px;
+        }
+        .modal-rating {
+            font-size: 18px;
+            color: #ffe66d;
+        }
+        .story-content {
+            padding: 30px;
+            color: #ddd;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        .story-content h3 {
+            color: #4ecdc4;
+            margin: 30px 0 15px 0;
+            font-size: 22px;
+        }
+        .story-content p {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+        .story-content .scene {
+            background: rgba(255, 107, 107, 0.1);
+            border-left: 3px solid #ff6b6b;
+            padding: 20px;
+            margin: 25px 0;
+            font-style: italic;
+        }
+        .story-content .dialogue {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+        .story-content .internal {
+            color: #4ecdc4;
+            font-style: italic;
+            margin: 15px 0;
+        }
+        .clickable-title {
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        .clickable-title:hover {
+            color: #ff6b6b;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Story Ideas</h1>
+            <p>Narrative possibilities ranked by dramatic potential and thematic weight</p>
+        </div>
+
+        <div class="sort-info">Sorted by compelling rating (highest to lowest)</div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th style="width: 25%;">Title & Premise</th>
+                        <th style="width: 20%;">Key Tensions</th>
+                        <th style="width: 20%;">Relationships</th>
+                        <th style="width: 25%;">Central Conflict</th>
+                        <th class="rating-col">Rating</th>
+                    </tr>
+                </thead>
+                <tbody id="storiesTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Story Modal -->
+    <div id="storyModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button class="modal-close" onclick="closeModal()">×</button>
+                <h2 class="modal-title" id="modalTitle"></h2>
+                <div class="modal-rating" id="modalRating"></div>
+            </div>
+            <div class="story-content" id="storyContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const storyIdeas = [
+            {
+                title: "The Photograph",
+                premise: "A journalist discovers an old photograph that seemingly shows Bruce Kent bleeding from a minor injury at a charity event. They begin investigating whether the 'invulnerable' Mongoose can actually be hurt, forcing Bruce to navigate increasingly dangerous situations to maintain his cover.",
+                keyTension: ["Truth vs. Deception", "Public Perception", "Physical Vulnerability"],
+                relationships: ["Bruce & The Media", "Bruce & Public Trust"],
+                centralConflict: "Bruce must convince a skeptical journalist that the photo is fake while actually nursing real injuries from recent 'tests' by villains.",
+                rating: 8.5
+            },
+            {
+                title: "Family Reunion",
+                premise: "Baibhav's extended family plans a surprise reunion, but a villain has discovered the connection and plans to attack during the gathering. Bruce must find a way to protect 20+ innocent people without revealing why he knows about the threat or his connection to them.",
+                keyTension: ["Protection vs. Exposure", "Duty vs. Powerlessness", "Collective Safety"],
+                relationships: ["Bruce & Baibhav's Family", "Bruce & Baibhav", "Villain & Innocents"],
+                centralConflict: "Bruce must orchestrate protection for people who don't know they need it, without any actual powers to stop a superhuman threat.",
+                rating: 9.2
+            },
+            {
+                title: "The Child's Question",
+                premise: "During a school visit, a child asks Bruce why he never seems happy if being a superhero is so great. The innocent question spreads on social media, leading to public speculation about the Mongoose's mental state and whether he's being forced to be a hero against his will.",
+                keyTension: ["Authenticity vs. Performance", "Isolation", "Public Scrutiny"],
+                relationships: ["Bruce & Children", "Bruce & Society", "Heroes & Mental Health"],
+                centralConflict: "Bruce must maintain his heroic facade while the public increasingly questions his wellbeing, knowing he can never explain the truth.",
+                rating: 8.7
+            },
+            {
+                title: "The Backup Plan",
+                premise: "Bruce discovers that the organization has been secretly training another decoy in case he dies. He must train his potential replacement while grappling with the realization that he's completely expendable and that someone else will inherit his nightmare.",
+                keyTension: ["Expendability", "Legacy of Lies", "Moral Burden"],
+                relationships: ["Bruce & His Replacement", "Bruce & The Organization", "Cycles of Sacrifice"],
+                centralConflict: "Bruce struggles with whether to warn his replacement about the true horror of the role or let them maintain hope.",
+                rating: 9.5
+            },
+            {
+                title: "The Villain's Mercy",
+                premise: "Smart Guy With A Gun captures Bruce and discovers he's actually powerless. Instead of killing him, the assassin is horrified by the deception and offers to help Bruce fake his death and escape. Bruce must choose between freedom and protecting Baibhav's family.",
+                keyTension: ["Freedom vs. Duty", "Enemy Compassion", "Moral Complexity"],
+                relationships: ["Bruce & Smart Guy", "Villain & Hero Dynamics", "Understanding Through Conflict"],
+                centralConflict: "Bruce must refuse mercy from an enemy who truly understands his situation, knowing it means continued suffering.",
+                rating: 9.8
+            },
+            {
+                title: "The Medical Emergency",
+                premise: "Bruce suffers a serious injury that requires immediate surgery, but going to a hospital would expose that he's not invulnerable. He must find underground medical help while multiple villains, sensing weakness, close in for the kill.",
+                keyTension: ["Survival vs. Secrecy", "Physical Limits", "Cascading Threats"],
+                relationships: ["Bruce & Underground Doctors", "Villains & Perceived Weakness", "Trust in Shadows"],
+                centralConflict: "Bruce must trust criminals to save his life while maintaining the illusion of invincibility to the world.",
+                rating: 8.3
+            },
+            {
+                title: "The Mongoose's Mother",
+                premise: "An elderly woman claims to be the Mongoose's mother and demands to see her son. The media frenzy forces Bruce to either reject a stranger seeking closure with 'her son' or risk exposing that he doesn't know his own 'mother'.",
+                keyTension: ["False Identity", "Emotional Manipulation", "Public Performance"],
+                relationships: ["Bruce & False Family", "Media & Personal Life", "Loneliness vs. Connection"],
+                centralConflict: "Bruce must navigate a relationship with someone who might be Baibhav's actual mother without knowing the truth.",
+                rating: 7.5
+            },
+            {
+                title: "The Power Swap",
+                premise: "A villain's device temporarily gives Bruce actual superpowers for 48 hours. As he experiences what being a real hero feels like, he must decide whether to find a way to make the powers permanent or accept returning to his powerless existence.",
+                keyTension: ["Power vs. Integrity", "Temporary Relief", "True Heroism"],
+                relationships: ["Bruce & His Ideal Self", "Bruce & The Role", "Power & Corruption"],
+                centralConflict: "Bruce discovers that having powers makes the deception easier but betrays the sacrifice he agreed to make.",
+                rating: 8.9
+            },
+            {
+                title: "The Confession Tape",
+                premise: "Professor Pyrofessor releases a fake 'confession' video of the Mongoose admitting to being a fraud. Bruce must discredit his own true story while the public debates whether their hero has been lying to them all along.",
+                keyTension: ["Truth as Weapon", "Gaslighting Reality", "Public Faith"],
+                relationships: ["Bruce & Public Opinion", "Villain & Psychological Warfare", "Truth & Power"],
+                centralConflict: "Bruce must prove a truth is a lie when everyone's instincts tell them it feels genuine.",
+                rating: 9.1
+            },
+            {
+                title: "The Final Test",
+                premise: "A new villain announces they've discovered how to permanently kill the Mongoose and will demonstrate it publicly. Bruce must face certain death in front of the world, knowing that running would expose the deception and doom Baibhav's family.",
+                keyTension: ["Sacrifice vs. Survival", "Public Execution", "Ultimate Heroism"],
+                relationships: ["Bruce & Death", "Bruce & Legacy", "Baibhav & Bruce's Sacrifice"],
+                centralConflict: "Bruce must choose between dying to maintain the lie or living and condemning innocents.",
+                rating: 9.9,
+                fullStory: `
+                    <h3>Chapter 1: The Announcement</h3>
+                    
+                    <p>The villain called himself Terminus. No grandiose costume, no theatrical flair—just a man in a simple black suit standing before every screen in the city.</p>
+                    
+                    <div class="scene">"Citizens of this city, I am Terminus. In seventy-two hours, at noon in Founders Square, I will demonstrate the permanent death of your beloved Masculine Mongoose. This is not a threat. This is not a challenge. This is simply what will happen."</div>
+                    
+                    <p>Bruce Kent sat in his apartment, watching his death sentence delivered with corporate efficiency. His hands didn't shake—they'd stopped doing that years ago. Instead, he felt a strange lightness, almost relief.</p>
+                    
+                    <div class="internal">Finally. An ending.</div>
+                    
+                    <p>His phone buzzed. The Organization, as always, had protocols.</p>
+                    
+                    <div class="dialogue">"Mongoose, report to briefing immediately."</div>
+                    
+                    <h3>Chapter 2: The Briefing</h3>
+                    
+                    <p>The conference room held the usual suspects: handlers, analysts, people whose names Bruce had never been told. On the wall, Terminus's face—ordinary, forgettable, except for the absolute certainty in his eyes.</p>
+                    
+                    <div class="dialogue">"He's not bluffing," the lead analyst said. "Our intelligence suggests he's developed something called the Absolute Nullifier. It doesn't just kill—it prevents any form of resurrection, healing, or return. Permanent death, even for true immortals."</div>
+                    
+                    <p>Bruce almost laughed. They were worried about killing someone who couldn't die, while he sat there, mortality wrapped in spandex.</p>
+                    
+                    <div class="dialogue">"The real Mongoose will be secured in a bunker," his handler continued. "Obviously, you cannot appear at Founders Square."</div>
+                    
+                    <div class="dialogue">"Obviously," Bruce echoed.</div>
+                    
+                    <div class="dialogue">"We'll create a distraction, fake an emergency elsewhere. The public will understand why you couldn't attend your own execution."</div>
+                    
+                    <p>Bruce stood up. Five years of obedience, of perfect performance. Five years of dying daily for people who didn't know his name.</p>
+                    
+                    <div class="dialogue">"No."</div>
+                    
+                    <h3>Chapter 3: The Choice</h3>
+                    
+                    <p>The room erupted. Protocols, procedures, contingencies—words thrown like weapons at a man who'd already made his choice.</p>
+                    
+                    <div class="dialogue">"You'll blow the entire operation!"</div>
+                    <div class="dialogue">"Baibhav's family—"</div>
+                    <div class="dialogue">"The city needs—"</div>
+                    
+                    <div class="dialogue">"The city," Bruce interrupted, his voice steady as his hands, "needs to see their hero face death without flinching. That's what heroes do."</div>
+                    
+                    <p>His handler's face went through several expressions before settling on understanding. They'd chosen Bruce for his willingness to sacrifice. They shouldn't be surprised when he actually did it.</p>
+                    
+                    <div class="dialogue">"You'll die."</div>
+                    
+                    <div class="dialogue">"I've been dying for five years. At least this time, it'll mean something."</div>
+                    
+                    <h3>Chapter 4: Seventy-Two Hours</h3>
+                    
+                    <p>Bruce spent his remaining time methodically. He wrote letters—not goodbyes, but explanations. For Baibhav, whose guilt would be crushing. For the Organization, who would need to find another sacrifice. For a mother he hadn't spoken to in five years, who still believed her son worked in accounting.</p>
+                    
+                    <p>He visited places he'd saved, invisible in civilian clothes. A playground where he'd stopped a bombing. A hospital that still stood because he'd thrown himself between it and a villain's rage. They didn't know him, would never know him, but he knew them.</p>
+                    
+                    <p>On the final night, Baibhav called. The real Mongoose, the man with power and purpose and a family to protect.</p>
+                    
+                    <div class="dialogue">"You don't have to do this."</div>
+                    
+                    <div class="dialogue">"Yes, I do. We both know what happens if the Mongoose runs. Every villain would know there's something he fears. They'd never stop hunting for the weakness."</div>
+                    
+                    <div class="dialogue">"I could—"</div>
+                    
+                    <div class="dialogue">"Your children need you. That's why we're doing this, remember? So they can have a father."</div>
+                    
+                    <p>Silence on the line. Then, quietly: <span class="dialogue">"I'm sorry."</span></p>
+                    
+                    <div class="dialogue">"Don't be. I chose this. Every day for five years, I chose this. Tomorrow's just... the last choice."</div>
+                    
+                    <h3>Chapter 5: Founders Square</h3>
+                    
+                    <p>The crowd was massive. Heroes lined the rooftops—real ones, with real powers, who could actually help if things went wrong. Bruce stood in the center of the square, the Mongoose suit feeling heavier than usual.</p>
+                    
+                    <p>Terminus appeared exactly at noon, carrying a small device that looked disappointingly ordinary.</p>
+                    
+                    <div class="dialogue">"Masculine Mongoose. I assume you've researched what this does?"</div>
+                    
+                    <div class="dialogue">"Permanent death," Bruce said, his voice carrying across the silent square. "No resurrection, no return."</div>
+                    
+                    <div class="dialogue">"And yet you came."</div>
+                    
+                    <div class="dialogue">"Heroes don't run."</div>
+                    
+                    <p>Terminus studied him, and for a moment, Bruce saw something flicker in those certain eyes—confusion, perhaps even respect.</p>
+                    
+                    <div class="dialogue">"You know something," Terminus said quietly, only for Bruce to hear. "You know this will actually work on you. You're not really—"</div>
+                    
+                    <div class="dialogue">"I'm exactly who this city needs me to be," Bruce interrupted. "Are you going to test your device or not?"</div>
+                    
+                    <h3>Chapter 6: The Truth in Dying</h3>
+                    
+                    <p>The device activated with a simple hum. No light show, no dramatic effects—just a growing certainty that this was the end.</p>
+                    
+                    <p>Bruce felt it immediately. Not pain, but cessation. His cells stopping their dance, his heart forgetting its rhythm. He had seconds, maybe less.</p>
+                    
+                    <p>He could see the crowd, the horror dawning on their faces as their invincible hero swayed. He could see heroes preparing to intervene, to save him.</p>
+                    
+                    <p>With his last strength, Bruce raised his hand—stop. Let this happen. Let them see.</p>
+                    
+                    <div class="internal">This is what heroism looks like. Not the power to survive everything, but the choice to face it anyway.</div>
+                    
+                    <p>He fell to his knees, then forward. The Mongoose mask cracked against the concrete, and through the broken eyepiece, Bruce Kent's very human eye stared at the sky.</p>
+                    
+                    <p>Terminus stepped back, his certainty shattered. He'd expected tricks, resurrections, the usual hero dramatics. Not this. Not actual death.</p>
+                    
+                    <div class="dialogue">"No," he whispered. "You're supposed to be invulnerable. You're supposed to be—"</div>
+                    
+                    <p>But Bruce couldn't hear him anymore.</p>
+                    
+                    <h3>Epilogue: The Legend</h3>
+                    
+                    <p>The city mourned like it had lost its heart. The footage played endlessly—the Mongoose standing firm, refusing to run, raising his hand to stop anyone from interfering with his sacrifice.</p>
+                    
+                    <p>Villains went quiet. If the Mongoose could die—truly die—for this city, what did that mean? What had they been fighting all along?</p>
+                    
+                    <p>In a bunker miles away, Baibhav Hegadi held his children and wept. They would grow up in a safer world because a powerless man had pretended to be powerful, and then proved that true strength had nothing to do with invulnerability.</p>
+                    
+                    <p>The Organization began searching for another volunteer, another brave fool willing to wear the mask. But they knew, as everyone now knew, that there had only ever been one Masculine Mongoose.</p>
+                    
+                    <p>Not the man with powers. The man who chose to die so others could live.</p>
+                    
+                    <p>In the end, Bruce Kent got what he'd always wanted—to be a real hero. It had just cost him everything.</p>
+                    
+                    <div class="internal">But then again, that's what heroes do.</div>
+                `
+            },
+            {
+                title: "The Insurance Policy",
+                premise: "Bruce discovers Baibhav has been secretly paying into a life insurance policy for him, but the insurance company investigates whether the 'invulnerable' Mongoose actually needs life insurance. Bruce must prevent them from uncovering the truth while dealing with the emotional weight of Baibhav's hidden guilt.",
+                keyTension: ["Hidden Care", "Financial Investigation", "Guilt & Gratitude"],
+                relationships: ["Bruce & Baibhav's Guilt", "Corporate & Heroic Identity", "Secret Support Systems"],
+                centralConflict: "Bruce must sabotage an investigation that would reveal Baibhav's care for him while processing that someone actually worries about his death.",
+                rating: 8.8
+            },
+            {
+                title: "The Anniversary",
+                premise: "On the fifth anniversary of becoming the Mongoose, Bruce receives anonymous gifts from people whose lives he's saved. But one gift contains a tracking device, and Bruce realizes someone is using gratitude as a weapon to find where he lives when he's not in costume.",
+                keyTension: ["Gratitude as Danger", "Privacy vs. Connection", "Weaponized Kindness"],
+                relationships: ["Bruce & Those He Saved", "Isolation & Recognition", "Trust & Paranoia"],
+                centralConflict: "Bruce must reject the only genuine appreciation he receives because accepting human connection could destroy everything.",
+                rating: 9.0
+            },
+            {
+                title: "The Doppelganger",
+                premise: "A shapeshifter starts appearing as the Mongoose and committing crimes. Bruce must stop them without revealing that he knows things only the 'real' Mongoose would know, while the public demands both Mongooses fight to prove who's genuine.",
+                keyTension: ["Identity Theft", "Proving Authenticity", "Double Deception"],
+                relationships: ["Bruce & His Reflection", "Public & Two Truths", "Criminal & Identity"],
+                centralConflict: "Bruce must defeat someone with actual powers while pretending to have powers himself, knowing the shapeshifter could expose him at any moment.",
+                rating: 8.4
+            },
+            {
+                title: "The Therapist",
+                premise: "The Hero Association mandates psychological evaluations for all heroes. Bruce must convince a therapist he's mentally healthy while describing a life of constant danger, isolation, and deception—without revealing the true source of his trauma.",
+                keyTension: ["Mental Health vs. Secrecy", "Professional Help", "Institutional Pressure"],
+                relationships: ["Bruce & Mental Health", "Heroes & Vulnerability", "Truth in Therapy"],
+                centralConflict: "Bruce must appear psychologically sound while honestly describing experiences that would break any normal person.",
+                rating: 9.3
+            },
+            {
+                title: "The Witness",
+                premise: "A child witnesses Bruce changing into his Mongoose costume in an alley during an emergency. The child's excitement about knowing the hero's 'secret identity' forces Bruce to maintain a relationship with them to ensure they don't investigate further and discover the real truth.",
+                keyTension: ["Innocent Knowledge", "Protective Deception", "Childhood Wonder"],
+                relationships: ["Bruce & Innocent Witness", "Secrets Within Secrets", "Protecting Through Lies"],
+                centralConflict: "Bruce must let a child believe they know his secret to prevent them from discovering his actual secret.",
+                rating: 8.0
+            },
+            {
+                title: "The Sick Day",
+                premise: "Bruce contracts a severe flu during a city-wide crisis. He must appear in public as the Mongoose, maintaining the illusion of superhuman health while barely able to stand, as villains test whether illness can affect the 'invulnerable' hero.",
+                keyTension: ["Human Frailty", "Public Duty", "Physical Performance"],
+                relationships: ["Bruce & His Body", "Weakness & Expectations", "Villains & Opportunity"],
+                centralConflict: "Bruce must perform superhuman feats while his body betrays him, knowing that showing any weakness could trigger a feeding frenzy.",
+                rating: 8.6
+            },
+            {
+                title: "The Love Letter",
+                premise: "Bruce receives a genuine love letter from someone who claims to see through the Mongoose's public persona to the sad, lonely person beneath. He must determine if this is a trap, a coincidence, or if someone actually understands him—and why that might be the most dangerous possibility.",
+                keyTension: ["Connection vs. Safety", "Being Seen", "Love as Threat"],
+                relationships: ["Bruce & Potential Love", "Intimacy & Danger", "Understanding & Fear"],
+                centralConflict: "Bruce faces someone who loves him for who he really is, making them the greatest threat to everyone he protects.",
+                rating: 9.7
+            },
+            {
+                title: "The Retirement Plan",
+                premise: "The organization presents Bruce with an exit strategy: fake the Mongoose's death in five years and live freely with a new identity. But Bruce discovers this means they're already training Baibhav's eldest child to become the next real Mongoose, perpetuating the cycle.",
+                keyTension: ["Future Freedom", "Generational Trauma", "Escape vs. Responsibility"],
+                relationships: ["Bruce & The Future", "Children & Legacy", "Hope & Guilt"],
+                centralConflict: "Bruce must decide whether to accept freedom knowing it dooms another generation to his fate.",
+                rating: 9.6
+            },
+            {
+                title: "The Mirror Match",
+                premise: "A villain with probability manipulation powers ensures that every attack on Bruce succeeds—bullets find gaps, falls result in injuries, every danger becomes real. Bruce must survive a day where his usual luck in avoiding harm completely reverses.",
+                keyTension: ["Luck vs. Skill", "Probability & Reality", "Inevitable Harm"],
+                relationships: ["Bruce & Chance", "Survival & Statistics", "Skill Without Power"],
+                centralConflict: "Bruce must rely purely on human skill and intelligence when the universe itself conspires to expose his vulnerability.",
+                rating: 8.2
+            },
+            {
+                title: "The Documentary",
+                premise: "A filmmaker gets approval to create an intimate documentary about the Mongoose's daily life. Bruce must perform his entire existence for cameras while ensuring nothing reveals the deception, as the filmmaker keeps pushing for 'authentic' moments.",
+                keyTension: ["Performance Within Performance", "Documented Lies", "Authentic Fakeness"],
+                relationships: ["Bruce & The Camera", "Truth & Documentation", "Public & Private"],
+                centralConflict: "Bruce must make his fake life appear real for cameras trying to capture reality, creating layers of performance that threaten to collapse.",
+                rating: 9.4
+            }
+        ];
+
+        function getRatingClass(rating) {
+            if (rating >= 9.5) return 'rating-high';
+            if (rating >= 8.5) return 'rating-medium';
+            return 'rating-low';
+        }
+
+        function getRatingStars(rating) {
+            const fullStars = Math.floor(rating);
+            const halfStar = rating % 1 >= 0.5 ? '½' : '';
+            return '★'.repeat(fullStars) + halfStar;
+        }
+
+        function displayStories() {
+            const tbody = document.getElementById('storiesTableBody');
+            tbody.innerHTML = '';
+            
+            // Sort stories by rating (highest first)
+            const sortedStories = [...storyIdeas].sort((a, b) => b.rating - a.rating);
+            
+            sortedStories.forEach((story, index) => {
+                const row = document.createElement('tr');
+                row.style.opacity = '0';
+                row.style.transform = 'translateY(10px)';
+                
+                row.innerHTML = `
+                    <td>
+                        <div class="story-number">${index + 1}</div>
+                    </td>
+                    <td>
+                        <div class="story-title ${story.fullStory ? 'clickable-title' : ''}" 
+                             ${story.fullStory ? `onclick="openStory('${story.title.replace(/'/g, "\\'")}')"` : ''}>
+                            ${story.title}
+                        </div>
+                        <div class="story-premise">${story.premise}</div>
+                    </td>
+                    <td class="tags-cell">
+                        ${story.keyTension.map(tension => `<span class="tension-tag">${tension}</span>`).join('')}
+                    </td>
+                    <td class="tags-cell">
+                        ${story.relationships.map(rel => `<span class="relationship-tag">${rel}</span>`).join('')}
+                    </td>
+                    <td class="conflict-cell">
+                        ${story.centralConflict}
+                    </td>
+                    <td class="rating-cell ${getRatingClass(story.rating)}">
+                        ${story.rating}
+                        <span class="rating-stars">${getRatingStars(story.rating)}</span>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+                
+                // Animate row appearance
+                setTimeout(() => {
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '1';
+                    row.style.transform = 'translateY(0)';
+                }, index * 50);
+            });
+        }
+
+        // Display stories on load
+        window.addEventListener('load', () => {
+            displayStories();
+            
+            // Auto-open "The Final Test" story after a brief delay for animation
+            setTimeout(() => {
+                openStory('The Final Test');
+            }, 800);
+        });
+        
+        // Modal functions
+        function openStory(title) {
+            const story = storyIdeas.find(s => s.title === title);
+            if (!story || !story.fullStory) return;
+            
+            const modal = document.getElementById('storyModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalRating = document.getElementById('modalRating');
+            const storyContent = document.getElementById('storyContent');
+            
+            modalTitle.textContent = story.title;
+            modalRating.innerHTML = `Rating: ${story.rating} ${getRatingStars(story.rating)}`;
+            storyContent.innerHTML = story.fullStory;
+            
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            const modal = document.getElementById('storyModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Close modal on outside click
+        document.getElementById('storyModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+        
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

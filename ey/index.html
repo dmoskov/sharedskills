@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Masculine Mongoose - Complete Story World</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 350px;
+            background: #1a1a1a;
+            border-right: 2px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            position: relative;
+        }
+        .logo {
+            padding: 20px;
+            background: linear-gradient(135deg, #2a0a0a 0%, #1a1a1a 100%);
+            border-bottom: 2px solid #ff6b6b;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .logo h1 {
+            font-size: 24px;
+            color: #ff6b6b;
+            margin-bottom: 5px;
+        }
+        .logo p {
+            font-size: 12px;
+            color: #ffe66d;
+            font-style: italic;
+        }
+        .story-overview {
+            padding: 20px;
+            background: rgba(255,107,107,0.05);
+            border-bottom: 1px solid #333;
+        }
+        .story-overview h2 {
+            color: #ff6b6b;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .story-overview p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+        .key-facts {
+            padding: 20px;
+            background: rgba(78,205,196,0.05);
+            border-bottom: 1px solid #333;
+        }
+        .key-facts h3 {
+            color: #4ecdc4;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .fact-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .fact-icon {
+            color: #ffe66d;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .nav-section {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+        }
+        .nav-section h3 {
+            color: #a8e6cf;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .nav-item {
+            display: block;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+        .nav-item.active {
+            border-color: currentColor;
+            background: rgba(255,255,255,0.15);
+        }
+        .nav-item.relationships { color: #ff6b6b; }
+        .nav-item.tension { color: #ffe66d; }
+        .nav-item.heroism { color: #4ecdc4; }
+        .nav-item.timeline { color: #a8e6cf; }
+        .nav-item span {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+        .themes-section {
+            padding: 20px;
+            background: rgba(255,139,148,0.05);
+        }
+        .themes-section h3 {
+            color: #ff8b94;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .theme-tag {
+            display: inline-block;
+            padding: 6px 12px;
+            margin: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            font-size: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0a0a0a;
+        }
+        .content-header {
+            padding: 20px;
+            background: rgba(0,0,0,0.5);
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .current-view {
+            font-size: 20px;
+            color: #fff;
+        }
+        .view-description {
+            font-size: 14px;
+            color: #999;
+            margin-top: 5px;
+        }
+        .iframe-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .quote-block {
+            padding: 20px;
+            background: rgba(255,107,107,0.1);
+            border-left: 4px solid #ff6b6b;
+            margin: 20px 0;
+            font-style: italic;
+            color: #ffe66d;
+        }
+        .characters-list {
+            padding: 0 20px 20px 20px;
+        }
+        .character-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .character-name {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        .character-role {
+            color: #999;
+            font-size: 12px;
+        }
+        .toggle-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid #444;
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        .toggle-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                position: absolute;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 100;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-content {
+                width: 100%;
+            }
+            .toggle-btn {
+                display: block;
+            }
+        }
+        @media (min-width: 769px) {
+            .toggle-btn {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar" id="sidebar">
+        <div class="logo">
+            <h1>The Masculine Mongoose</h1>
+            <p>"The greater hero is usually the one who's less immune to bullets."</p>
+        </div>
+
+        <div class="story-overview">
+            <h2>The Deception</h2>
+            <p>
+                <strong>Bruce Kent</strong> is not a superhero. He's an ordinary man who volunteered to pretend to be the legendary <strong>Masculine Mongoose</strong> to protect the real hero's identity.
+            </p>
+            <p>
+                The actual Mongoose, <strong>Baibhav Hegadi</strong>, has a large family—spouse, 3 kids, siblings, and 16 nieces/nephews—who would become targets if his identity were known.
+            </p>
+            <p>
+                So Bruce lives a lie that everyone "knows" but can't prove, facing assassination attempts, public scorn, and complete isolation—all without any powers to protect himself.
+            </p>
+        </div>
+
+        <div class="quote-block">
+            "I'm not a real hero. I'm just doing a job."<br>
+            <small>- Bruce Kent</small>
+        </div>
+
+        <div class="key-facts">
+            <h3>Critical Context</h3>
+            <div class="fact-item">
+                <span class="fact-icon">⚡</span>
+                <div>Bruce has NO superpowers—every threat he faces could actually kill him</div>
+            </div>
+            <div class="fact-item">
+                <span class="fact-icon">🎭</span>
+                <div>The "Mask Code" prevents anyone from proving secret identities</div>
+            </div>
+            <div class="fact-item">
+                <span class="fact-icon">👥</span>
+                <div>20+ innocent lives depend on maintaining this deception</div>
+            </div>
+            <div class="fact-item">
+                <span class="fact-icon">💔</span>
+                <div>Bruce can never form genuine relationships or be honest with anyone</div>
+            </div>
+            <div class="fact-item">
+                <span class="fact-icon">🎯</span>
+                <div>Villains constantly test if Bruce is truly invulnerable</div>
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <h3>Explore the World</h3>
+            <a class="nav-item relationships" onclick="loadView('character_relationships.html', 'Character Network', this)">
+                Character Relationships
+                <span>The web of deception and protection</span>
+            </a>
+            <a class="nav-item tension" onclick="loadView('tension_map.html', 'Tension Points', this)">
+                Tension & Conflict Map
+                <span>Interconnected pressure points</span>
+            </a>
+            <a class="nav-item heroism" onclick="loadView('heroism_layers.html', 'Heroism Redefined', this)">
+                Layers of Heroism
+                <span>What makes a true hero?</span>
+            </a>
+            <a class="nav-item timeline" onclick="loadView('bruce_situation_timeline.html', 'A Day in Hell', this)">
+                Bruce's Daily Reality
+                <span>Living through a typical crisis</span>
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <h3>📚 Stories & Narratives</h3>
+            <a class="nav-item story-ideas active" style="background: rgba(255, 107, 107, 0.2); border-color: #ff6b6b;" onclick="loadView('story-ideas.html', 'Story Collection', this)">
+                <strong style="color: #ff6b6b;">Story Collection</strong>
+                <span>20 compelling narratives ranked by dramatic potential</span>
+            </a>
+            <a class="nav-item story-map" style="color: #4ecdc4;" onclick="loadView('story-belief-mapper.html', 'Story-Belief Mapper', this)">
+                Belief Network Mapper
+                <span>Connect stories to character beliefs</span>
+            </a>
+            <a class="nav-item story-web" style="color: #ff8b94;" onclick="loadView('story-web.html', 'Interactive Story Web', this)">
+                Story Web Explorer
+                <span>Visualize narrative connections</span>
+            </a>
+        </div>
+
+        <div class="characters-list">
+            <h3 style="color: #ff8b94; margin-bottom: 15px;">Key Players</h3>
+            <div class="character-item">
+                <div class="character-name">Bruce Kent</div>
+                <div class="character-role">The Decoy - Powerless volunteer living the lie</div>
+            </div>
+            <div class="character-item">
+                <div class="character-name">The Real Mongoose</div>
+                <div class="character-role">Baibhav Hegadi - Protected by Bruce's sacrifice</div>
+            </div>
+            <div class="character-item">
+                <div class="character-name">Smart Guy With A Gun</div>
+                <div class="character-role">Assassin testing Bruce's "invulnerability"</div>
+            </div>
+            <div class="character-item">
+                <div class="character-name">Professor Pyrofessor</div>
+                <div class="character-role">Villain exploiting the mask code</div>
+            </div>
+            <div class="character-item">
+                <div class="character-name">The Bank Child</div>
+                <div class="character-role">Innocent questioning Bruce's heroism</div>
+            </div>
+        </div>
+
+        <div class="themes-section">
+            <h3>Core Themes</h3>
+            <div class="theme-tag">Identity vs Truth</div>
+            <div class="theme-tag">Vulnerability as Strength</div>
+            <div class="theme-tag">The Cost of Deception</div>
+            <div class="theme-tag">Sacrifice Without Glory</div>
+            <div class="theme-tag">Isolation & Duty</div>
+            <div class="theme-tag">Redefining Heroism</div>
+            <div class="theme-tag">Moral Ambiguity</div>
+            <div class="theme-tag">Fear & Courage</div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="content-header">
+            <div>
+                <button class="toggle-btn" onclick="toggleSidebar()">☰ Menu</button>
+                <h2 class="current-view" id="current-view">Story Collection</h2>
+                <p class="view-description" id="view-description">20 compelling narratives ranked by dramatic potential</p>
+            </div>
+        </header>
+        <div class="iframe-container">
+            <iframe id="content-frame" src="story-ideas.html"></iframe>
+        </div>
+    </main>
+
+    <script>
+        function loadView(url, title, element) {
+            // Update iframe
+            document.getElementById('content-frame').src = url;
+            
+            // Update header
+            document.getElementById('current-view').textContent = title;
+            
+            // Update description based on element
+            const description = element.querySelector('span').textContent;
+            document.getElementById('view-description').textContent = description;
+            
+            // Update active state
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            element.classList.add('active');
+            
+            // Close sidebar on mobile after selection
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').classList.remove('open');
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            const sidebar = document.getElementById('sidebar');
+            const toggleBtn = document.querySelector('.toggle-btn');
+            
+            if (window.innerWidth <= 768 && 
+                !sidebar.contains(e.target) && 
+                !toggleBtn.contains(e.target) &&
+                sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('open');
+            }
+        });
+    </script>
+</body>
+</html>

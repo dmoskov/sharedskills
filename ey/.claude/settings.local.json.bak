@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(open /Users/moskov/Code/ey/masculine_mongoose_story.html)",
+      "Bash(open /Users/moskov/Code/ey/mongoose_network.html)",
+      "Bash(open story-ideas.html)",
+      "Bash(zip:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": []
+  }
+}

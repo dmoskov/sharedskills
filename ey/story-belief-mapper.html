@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story-Belief Network Mapper</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: #1a1a1a;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #333;
+        }
+
+        .sidebar h2 {
+            color: #4ecdc4;
+            margin-top: 0;
+            font-size: 1.5em;
+        }
+
+        .visualization {
+            flex: 1;
+            position: relative;
+        }
+
+        #network {
+            width: 100%;
+            height: 100%;
+        }
+
+        .story-input {
+            margin-bottom: 20px;
+        }
+
+        .story-input h3 {
+            color: #ffe66d;
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #ff6b6b, #e74c3c);
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .analysis-result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+
+        .connection-list {
+            margin-top: 10px;
+        }
+
+        .connection-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #333;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .connection-strength {
+            width: 50px;
+            height: 8px;
+            background: #444;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .strength-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .strength-high { background: #ff6b6b; }
+        .strength-medium { background: #ffe66d; }
+        .strength-low { background: #4ecdc4; }
+
+        .node {
+            cursor: pointer;
+        }
+
+        .node-story {
+            fill: #ffe66d;
+            stroke: #ffd93d;
+            stroke-width: 3px;
+        }
+
+        .node-belief {
+            fill: #4ecdc4;
+            stroke: #2eb5b5;
+            stroke-width: 2px;
+        }
+
+        .node-character {
+            fill: #ff6b6b;
+            stroke: #e74c3c;
+            stroke-width: 2px;
+        }
+
+        .node-theme {
+            fill: #a8e6cf;
+            stroke: #7dd3b0;
+            stroke-width: 2px;
+        }
+
+        .link {
+            fill: none;
+            stroke-opacity: 0.6;
+        }
+
+        .link-strong {
+            stroke: #ff6b6b;
+            stroke-width: 3px;
+        }
+
+        .link-medium {
+            stroke: #ffe66d;
+            stroke-width: 2px;
+        }
+
+        .link-weak {
+            stroke: #4ecdc4;
+            stroke-width: 1px;
+        }
+
+        .node-label {
+            font-size: 12px;
+            pointer-events: none;
+            text-anchor: middle;
+            fill: #e0e0e0;
+        }
+
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid #444;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            max-width: 300px;
+        }
+
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(26, 26, 26, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #333;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        select {
+            width: 100%;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Story-Belief Mapper</h2>
+            
+            <div class="story-input">
+                <h3>Story Premise</h3>
+                <textarea id="storyText" placeholder="Enter your story idea here... (e.g., 'Bruce discovers Margaret has been documenting his real identity')"></textarea>
+                
+                <label for="storyType">Story Type:</label>
+                <select id="storyType">
+                    <option value="custom">Custom Story</option>
+                    <option value="revelation">Truth Revelation</option>
+                    <option value="identity">Identity Crisis</option>
+                    <option value="relationship">Relationship Test</option>
+                    <option value="threat">External Threat</option>
+                    <option value="moral">Moral Dilemma</option>
+                </select>
+                
+                <button onclick="analyzeStory()">Map Connections</button>
+            </div>
+            
+            <div id="analysisResult"></div>
+        </div>
+        
+        <div class="visualization">
+            <svg id="network"></svg>
+            <div class="tooltip"></div>
+            <div class="legend">
+                <h4 style="margin-top: 0; color: #4ecdc4;">Node Types</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffe66d;"></div>
+                    <span>Story Ideas</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ecdc4;"></div>
+                    <span>Beliefs</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6b6b;"></div>
+                    <span>Characters</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #a8e6cf;"></div>
+                    <span>Themes</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Network data structure
+        const networkData = {
+            nodes: [],
+            links: []
+        };
+
+        // Core beliefs and themes
+        const beliefs = [
+            { id: "b1", label: "His job protects the Mongoose's family", type: "belief" },
+            { id: "b2", label: "He's not a real hero", type: "belief" },
+            { id: "b3", label: "The deception isolates him", type: "belief" },
+            { id: "b4", label: "Someone needs to keep the streets safe", type: "belief" },
+            { id: "b5", label: "His family must never know", type: "belief" },
+            { id: "b6", label: "Bruce's sacrifice allows him to be with his kids", type: "belief" },
+            { id: "b7", label: "The truth would destroy both men", type: "belief" },
+            { id: "b8", label: "Sometimes the story matters more than facts", type: "belief" },
+            { id: "b9", label: "The public deserves the truth", type: "belief" },
+            { id: "b10", label: "Heroes shouldn't hide", type: "belief" },
+            { id: "b11", label: "Information is power", type: "belief" },
+            { id: "b12", label: "Everyone has a price", type: "belief" },
+            { id: "b13", label: "Family comes first", type: "belief" }
+        ];
+
+        const themes = [
+            { id: "t1", label: "Identity & Deception", type: "theme" },
+            { id: "t2", label: "Sacrifice & Protection", type: "theme" },
+            { id: "t3", label: "Truth vs Fiction", type: "theme" },
+            { id: "t4", label: "Family & Isolation", type: "theme" },
+            { id: "t5", label: "Heroism & Recognition", type: "theme" },
+            { id: "t6", label: "Power & Control", type: "theme" }
+        ];
+
+        const characters = [
+            { id: "c1", label: "Bruce Kent", type: "character" },
+            { id: "c2", label: "Masculine Mongoose", type: "character" },
+            { id: "c3", label: "Margaret Marquez", type: "character" },
+            { id: "c4", label: "Lily Chen", type: "character" },
+            { id: "c5", label: "Victor Vega", type: "character" },
+            { id: "c6", label: "Sarah Chen", type: "character" },
+            { id: "c7", label: "Jamie Chen", type: "character" }
+        ];
+
+        // Initialize network
+        networkData.nodes = [...beliefs, ...themes, ...characters];
+
+        // Add some initial connections
+        const initialConnections = [
+            // Character to belief connections
+            { source: "c1", target: "b1", strength: "strong" },
+            { source: "c1", target: "b2", strength: "strong" },
+            { source: "c1", target: "b3", strength: "strong" },
+            { source: "c2", target: "b4", strength: "strong" },
+            { source: "c2", target: "b5", strength: "strong" },
+            { source: "c2", target: "b6", strength: "medium" },
+            { source: "c3", target: "b7", strength: "strong" },
+            { source: "c3", target: "b8", strength: "strong" },
+            { source: "c4", target: "b9", strength: "strong" },
+            { source: "c4", target: "b10", strength: "medium" },
+            { source: "c5", target: "b11", strength: "strong" },
+            { source: "c5", target: "b12", strength: "strong" },
+            { source: "c6", target: "b13", strength: "strong" },
+            
+            // Theme to belief connections
+            { source: "t1", target: "b2", strength: "medium" },
+            { source: "t1", target: "b3", strength: "strong" },
+            { source: "t2", target: "b1", strength: "strong" },
+            { source: "t2", target: "b6", strength: "strong" },
+            { source: "t3", target: "b7", strength: "strong" },
+            { source: "t3", target: "b8", strength: "strong" },
+            { source: "t3", target: "b9", strength: "strong" },
+            { source: "t4", target: "b3", strength: "medium" },
+            { source: "t4", target: "b5", strength: "strong" },
+            { source: "t4", target: "b13", strength: "strong" },
+            { source: "t5", target: "b2", strength: "strong" },
+            { source: "t5", target: "b10", strength: "strong" },
+            { source: "t6", target: "b11", strength: "strong" },
+            { source: "t6", target: "b12", strength: "medium" }
+        ];
+
+        networkData.links = initialConnections;
+
+        // D3 setup
+        const width = window.innerWidth - 350;
+        const height = window.innerHeight;
+
+        const svg = d3.select("#network")
+            .attr("width", width)
+            .attr("height", height);
+
+        const simulation = d3.forceSimulation(networkData.nodes)
+            .force("link", d3.forceLink(networkData.links).id(d => d.id).distance(100))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(30));
+
+        const link = svg.append("g")
+            .attr("class", "links")
+            .selectAll("line");
+
+        const node = svg.append("g")
+            .attr("class", "nodes")
+            .selectAll("g");
+
+        const tooltip = d3.select(".tooltip");
+
+        function updateVisualization() {
+            // Update links
+            const linkSelection = svg.select(".links")
+                .selectAll("line")
+                .data(networkData.links, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+
+            linkSelection.exit().remove();
+
+            const linkEnter = linkSelection.enter()
+                .append("line")
+                .attr("class", d => `link link-${d.strength}`);
+
+            // Update nodes
+            const nodeSelection = svg.select(".nodes")
+                .selectAll("g")
+                .data(networkData.nodes, d => d.id);
+
+            nodeSelection.exit().remove();
+
+            const nodeEnter = nodeSelection.enter()
+                .append("g")
+                .attr("class", "node")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            nodeEnter.append("circle")
+                .attr("r", d => d.type === "story" ? 25 : 20)
+                .attr("class", d => `node-${d.type}`);
+
+            nodeEnter.append("text")
+                .attr("class", "node-label")
+                .attr("dy", 35)
+                .text(d => d.label.length > 20 ? d.label.substring(0, 20) + "..." : d.label);
+
+            // Add hover effects
+            nodeEnter
+                .on("mouseover", function(event, d) {
+                    tooltip
+                        .style("opacity", 1)
+                        .html(`<strong>${d.type.charAt(0).toUpperCase() + d.type.slice(1)}</strong><br>${d.label}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                })
+                .on("mouseout", function() {
+                    tooltip.style("opacity", 0);
+                });
+
+            // Update simulation
+            simulation.nodes(networkData.nodes);
+            simulation.force("link").links(networkData.links);
+            simulation.alpha(1).restart();
+        }
+
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+        simulation.on("tick", () => {
+            svg.selectAll(".links line")
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            svg.selectAll(".nodes g")
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+        });
+
+        // Story analysis function
+        function analyzeStory() {
+            const storyText = document.getElementById('storyText').value;
+            const storyType = document.getElementById('storyType').value;
+            
+            if (!storyText.trim()) {
+                alert('Please enter a story premise');
+                return;
+            }
+
+            // Create story node
+            const storyId = `s${Date.now()}`;
+            const storyNode = {
+                id: storyId,
+                label: storyText.substring(0, 50) + (storyText.length > 50 ? '...' : ''),
+                type: 'story',
+                fullText: storyText
+            };
+
+            // Add story node
+            networkData.nodes.push(storyNode);
+
+            // Analyze connections
+            const connections = findConnections(storyText, storyType);
+
+            // Add connections to network
+            connections.forEach(conn => {
+                networkData.links.push({
+                    source: storyId,
+                    target: conn.target,
+                    strength: conn.strength
+                });
+            });
+
+            // Update visualization
+            updateVisualization();
+
+            // Display analysis results
+            displayAnalysis(storyNode, connections);
+        }
+
+        function findConnections(storyText, storyType) {
+            const connections = [];
+            const lowerText = storyText.toLowerCase();
+
+            // Character connections
+            characters.forEach(char => {
+                if (lowerText.includes(char.label.toLowerCase())) {
+                    connections.push({
+                        target: char.id,
+                        type: 'character',
+                        label: char.label,
+                        strength: 'strong'
+                    });
+                }
+            });
+
+            // Belief connections based on keywords
+            const beliefKeywords = {
+                b1: ['protect', 'family', 'mongoose'],
+                b2: ['not real', 'hero', 'fake'],
+                b3: ['isolation', 'alone', 'deception'],
+                b4: ['streets', 'safe', 'duty'],
+                b5: ['secret', 'never know', 'hide'],
+                b6: ['sacrifice', 'allows', 'kids'],
+                b7: ['truth', 'destroy', 'reveal'],
+                b8: ['story', 'matters', 'facts'],
+                b9: ['public', 'deserves', 'truth'],
+                b10: ['heroes', 'hide', 'open'],
+                b11: ['information', 'power', 'knowledge'],
+                b12: ['price', 'everyone', 'cost'],
+                b13: ['family', 'first', 'priority']
+            };
+
+            beliefs.forEach(belief => {
+                const keywords = beliefKeywords[belief.id];
+                if (keywords) {
+                    const matchCount = keywords.filter(kw => lowerText.includes(kw)).length;
+                    if (matchCount > 0) {
+                        connections.push({
+                            target: belief.id,
+                            type: 'belief',
+                            label: belief.label,
+                            strength: matchCount >= 2 ? 'strong' : 'medium'
+                        });
+                    }
+                }
+            });
+
+            // Theme connections based on story type and content
+            const themeMap = {
+                revelation: ['t3', 't5'],
+                identity: ['t1', 't4'],
+                relationship: ['t2', 't4'],
+                threat: ['t6', 't2'],
+                moral: ['t3', 't5']
+            };
+
+            if (themeMap[storyType]) {
+                themeMap[storyType].forEach(themeId => {
+                    const theme = themes.find(t => t.id === themeId);
+                    if (theme) {
+                        connections.push({
+                            target: theme.id,
+                            type: 'theme',
+                            label: theme.label,
+                            strength: 'medium'
+                        });
+                    }
+                });
+            }
+
+            return connections;
+        }
+
+        function displayAnalysis(storyNode, connections) {
+            const resultDiv = document.getElementById('analysisResult');
+            
+            const groupedConnections = {
+                character: connections.filter(c => c.type === 'character'),
+                belief: connections.filter(c => c.type === 'belief'),
+                theme: connections.filter(c => c.type === 'theme')
+            };
+
+            let html = `
+                <div class="analysis-result">
+                    <h3 style="color: #ffe66d;">Story Analysis</h3>
+                    <p style="font-style: italic; color: #888;">"${storyNode.fullText}"</p>
+            `;
+
+            ['character', 'belief', 'theme'].forEach(type => {
+                if (groupedConnections[type].length > 0) {
+                    html += `
+                        <div class="connection-list">
+                            <h4 style="color: #4ecdc4;">${type.charAt(0).toUpperCase() + type.slice(1)} Connections</h4>
+                    `;
+                    
+                    groupedConnections[type].forEach(conn => {
+                        html += `
+                            <div class="connection-item">
+                                <span>${conn.label}</span>
+                                <div class="connection-strength">
+                                    <div class="strength-bar strength-${conn.strength}" 
+                                         style="width: ${conn.strength === 'strong' ? '100%' : conn.strength === 'medium' ? '60%' : '30%'}">
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                }
+            });
+
+            html += '</div>';
+            resultDiv.innerHTML = html;
+        }
+
+        // Initialize visualization
+        updateVisualization();
+
+        // Add example stories
+        const exampleStories = [
+            "Bruce discovers Margaret has been documenting his real identity",
+            "The Mongoose's daughter starts investigating her father's night shifts",
+            "Victor threatens to expose both identities unless Bruce works for him"
+        ];
+
+        // Auto-resize on window resize
+        window.addEventListener('resize', () => {
+            const newWidth = window.innerWidth - 350;
+            svg.attr("width", newWidth);
+            simulation.force("center", d3.forceCenter(newWidth / 2, height / 2));
+            simulation.alpha(0.3).restart();
+        });
+    </script>
+</body>
+</html>
