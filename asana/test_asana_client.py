@@ -808,5 +808,373 @@ class TestExceptionClasses:
         assert isinstance(error, AsanaError)
 
 
+class TestPortfolioOperations:
+    """Tests for portfolio operations."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    def test_get_portfolio(self, client):
+        """Should return portfolio details."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "portfolio1",
+                "name": "Q1 Projects",
+                "owner": {"name": "Test User"},
+                "color": "light-blue"
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_portfolio("portfolio1")
+
+        assert result["gid"] == "portfolio1"
+        assert result["name"] == "Q1 Projects"
+        call_args = client._session.request.call_args
+        assert "portfolios/portfolio1" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+    def test_get_portfolios(self, client):
+        """Should return list of portfolios."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "p1", "name": "Portfolio 1"},
+                {"gid": "p2", "name": "Portfolio 2"}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_portfolios()
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Portfolio 1"
+
+    def test_get_portfolios_with_owner(self, client):
+        """Should filter portfolios by owner."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": []}
+        client._session.request.return_value = mock_response
+
+        client.get_portfolios(owner="user123")
+
+        call_args = client._session.request.call_args
+        params = call_args.kwargs.get("params", call_args[1].get("params", {}))
+        assert params.get("owner") == "user123"
+
+    def test_get_portfolio_items(self, client):
+        """Should return items in a portfolio."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "proj1", "name": "Project 1", "resource_type": "project"},
+                {"gid": "proj2", "name": "Project 2", "resource_type": "project"}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_portfolio_items("portfolio1")
+
+        assert len(result) == 2
+        assert result[0]["resource_type"] == "project"
+        call_args = client._session.request.call_args
+        assert "portfolios/portfolio1/items" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+
+class TestTeamOperations:
+    """Tests for team operations."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    def test_get_teams(self, client):
+        """Should return list of teams."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "team1", "name": "Engineering"},
+                {"gid": "team2", "name": "Design"}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_teams()
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Engineering"
+        call_args = client._session.request.call_args
+        assert "organizations/test_ws/teams" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+    def test_get_team(self, client):
+        """Should return team details."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "team1",
+                "name": "Engineering",
+                "description": "The engineering team"
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_team("team1")
+
+        assert result["gid"] == "team1"
+        assert result["name"] == "Engineering"
+
+    def test_get_team_members(self, client):
+        """Should return team members."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "user1", "name": "Alice", "email": "alice@example.com"},
+                {"gid": "user2", "name": "Bob", "email": "bob@example.com"}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_team_members("team1")
+
+        assert len(result) == 2
+        assert result[0]["name"] == "Alice"
+        call_args = client._session.request.call_args
+        assert "teams/team1/users" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+
+class TestTagOperations:
+    """Tests for tag operations."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    def test_get_tags(self, client):
+        """Should return list of tags."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "tag1", "name": "urgent", "color": "red"},
+                {"gid": "tag2", "name": "blocked", "color": "yellow"}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_tags()
+
+        assert len(result) == 2
+        assert result[0]["name"] == "urgent"
+
+    def test_get_tag(self, client):
+        """Should return tag details."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "tag1", "name": "urgent", "color": "red", "notes": "High priority"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.get_tag("tag1")
+
+        assert result["name"] == "urgent"
+        assert result["color"] == "red"
+
+    def test_create_tag(self, client):
+        """Should create a new tag."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "data": {"gid": "new_tag", "name": "feature", "color": "green"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.create_tag(name="feature", color="green")
+
+        assert result["name"] == "feature"
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["name"] == "feature"
+        assert json_data["data"]["color"] == "green"
+
+    def test_update_tag(self, client):
+        """Should update a tag."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "tag1", "name": "critical", "color": "red"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_tag("tag1", name="critical")
+
+        assert result["name"] == "critical"
+
+    def test_update_tag_no_changes(self, client):
+        """Should raise error if no updates provided."""
+        with pytest.raises(ValueError) as exc_info:
+            client.update_tag("tag1")
+        assert "No updates provided" in str(exc_info.value)
+
+    def test_delete_tag(self, client):
+        """Should delete a tag."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.delete_tag("tag1")
+
+        assert result is True
+        call_args = client._session.request.call_args
+        assert call_args.kwargs.get("method") == "DELETE" or call_args[0][0] == "DELETE"
+
+    def test_add_tag_to_task(self, client):
+        """Should add a tag to a task."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.add_tag_to_task("task1", "tag1")
+
+        call_args = client._session.request.call_args
+        assert "tasks/task1/addTag" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["tag"] == "tag1"
+
+    def test_remove_tag_from_task(self, client):
+        """Should remove a tag from a task."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.remove_tag_from_task("task1", "tag1")
+
+        call_args = client._session.request.call_args
+        assert "tasks/task1/removeTag" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+
+class TestSectionCRUDOperations:
+    """Tests for section CRUD operations."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    def test_create_section(self, client):
+        """Should create a section in a project."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "data": {"gid": "new_section", "name": "In Review"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.create_section("proj1", "In Review")
+
+        assert result["name"] == "In Review"
+        call_args = client._session.request.call_args
+        assert "projects/proj1/sections" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+    def test_create_section_with_position(self, client):
+        """Should create section with insert position."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "data": {"gid": "new_section", "name": "New Section"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.create_section("proj1", "New Section", insert_after="section1")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["insert_after"] == "section1"
+
+    def test_update_section(self, client):
+        """Should update a section's name."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "section1", "name": "Done"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_section("section1", "Done")
+
+        assert result["name"] == "Done"
+        call_args = client._session.request.call_args
+        assert "sections/section1" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+
+    def test_delete_section(self, client):
+        """Should delete a section."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.delete_section("section1")
+
+        assert result is True
+        call_args = client._session.request.call_args
+        assert call_args.kwargs.get("method") == "DELETE" or call_args[0][0] == "DELETE"
+
+    def test_move_section(self, client):
+        """Should move/reorder a section."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.move_section("proj1", "section1", after_section="section2")
+
+        call_args = client._session.request.call_args
+        assert "projects/proj1/sections/insert" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["section"] == "section1"
+        assert json_data["data"]["after_section"] == "section2"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

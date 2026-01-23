@@ -43,6 +43,8 @@ python3 asana_client.py my-tasks -i
 | `search <query>` | Search tasks by text |
 | `my-tasks` | Tasks assigned to me |
 | `projects` | List all projects |
+| `sections <project_gid>` | List sections in project |
+| `stories <task_gid>` | Get task activity history |
 | `workspaces` | List all workspaces |
 
 ### Write Operations
@@ -124,6 +126,105 @@ client.update_task(task["gid"], completed=True)
 
 # Add comment
 client.add_comment(task["gid"], "Done!")
+```
+
+### Portfolio Operations
+
+```python
+# List portfolios
+portfolios = client.get_portfolios()
+
+# Get portfolio details
+portfolio = client.get_portfolio("portfolio_gid")
+
+# Get projects in a portfolio
+items = client.get_portfolio_items("portfolio_gid")
+```
+
+### Team Operations
+
+```python
+# List teams in organization
+teams = client.get_teams()
+
+# Get team details
+team = client.get_team("team_gid")
+
+# Get team members
+members = client.get_team_members("team_gid")
+```
+
+### Tag Operations
+
+```python
+# List tags
+tags = client.get_tags()
+
+# Create a tag
+tag = client.create_tag(name="urgent", color="red")
+
+# Add/remove tags from tasks
+client.add_tag_to_task("task_gid", "tag_gid")
+client.remove_tag_from_task("task_gid", "tag_gid")
+
+# Update or delete tags
+client.update_tag("tag_gid", name="critical")
+client.delete_tag("tag_gid")
+```
+
+### Section Operations
+
+```python
+# List sections in a project
+sections = client.get_project_sections("project_gid")
+
+# Create a section
+section = client.create_section("project_gid", "In Review")
+
+# Update section name
+client.update_section("section_gid", "Done")
+
+# Move/reorder a section
+client.move_section("project_gid", "section_gid", after_section="other_section_gid")
+
+# Delete a section
+client.delete_section("section_gid")
+```
+
+### Dependency Operations
+
+```python
+# Get task dependencies
+deps = client.get_dependencies("task_gid")
+
+# Add dependencies
+client.add_dependency("task_gid", "depends_on_gid")
+client.add_dependencies("task_gid", ["dep1", "dep2", "dep3"])
+
+# Chain tasks sequentially (B depends on A, C depends on B, etc.)
+client.chain_dependencies(["task_a", "task_b", "task_c"])
+
+# Remove dependency
+client.remove_dependency("task_gid", "depends_on_gid")
+
+# Get tasks that depend on this task
+dependents = client.get_dependents("task_gid")
+```
+
+## Advanced: Using the Official SDK
+
+For features not covered by `asana_client.py`, use the official SDK with managed auth:
+
+```python
+from asana_sdk import get_client
+import asana
+
+# Get client with OAuth token management
+client = get_client()
+
+# Use any SDK API directly
+goals_api = asana.GoalsApi(client)
+goals = goals_api.get_goals(opts={"workspace": "workspace_gid"})
 ```
 
 ## Requirements
