@@ -19,6 +19,9 @@ Usage as CLI:
     python3 asana_client.py update <gid> --completed true
     python3 asana_client.py comment <gid> "Comment text"
     python3 asana_client.py my-tasks
+    python3 asana_client.py sections <project_gid>
+    python3 asana_client.py stories <task_gid>
+    python3 asana_client.py subtasks <task_gid>
 
 Usage as library:
     from asana_client import AsanaClient
@@ -28,6 +31,7 @@ Usage as library:
 
 import argparse
 import json
+import logging
 import os
 import sys
 from typing import List, Optional
@@ -37,6 +41,9 @@ try:
 except ImportError:
     print("Error: requests package required. Install with: pip install requests")
     sys.exit(1)
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Constants
 ASANA_BASE_URL = "https://app.asana.com/api/1.0"
@@ -135,11 +142,13 @@ class AsanaClient:
 
         except requests.Timeout:
             if retries > 0:
+                logger.warning(f"Request timed out, retrying ({retries} left)...")
                 return self._request(method, endpoint, params, json_data, retries - 1)
             raise AsanaAPIError(f"Request timed out after {REQUEST_TIMEOUT}s")
 
         except requests.ConnectionError as e:
             if retries > 0:
+                logger.warning(f"Connection error, retrying ({retries} left)...")
                 return self._request(method, endpoint, params, json_data, retries - 1)
             raise AsanaAPIError(f"Connection error: {e}")
 
@@ -165,6 +174,14 @@ class AsanaClient:
         return result.get("data", [])
 
     # ========== Project Operations ==========
+
+    def get_project(self, project_gid: str, opt_fields: str = None) -> dict:
+        """Get project details."""
+        params = {
+            "opt_fields": opt_fields or "name,notes,owner.name,due_on,current_status.color,custom_fields"
+        }
+        result = self._request("GET", f"projects/{project_gid}", params)
+        return result.get("data", {})
 
     def get_projects(
         self,
@@ -269,6 +286,8 @@ class AsanaClient:
         assignee: str = None,
         due_on: str = None,
         notes: str = None,
+        html_notes: str = None,
+        custom_fields: dict = None,
         workspace: str = None,
     ) -> dict:
         """Create a new task."""
@@ -282,6 +301,10 @@ class AsanaClient:
             data["due_on"] = due_on
         if notes:
             data["notes"] = notes
+        if html_notes:
+            data["html_notes"] = html_notes
+        if custom_fields:
+            data["custom_fields"] = custom_fields
         if workspace and not project:
             data["workspace"] = self._get_workspace(workspace)
         elif not project:
@@ -308,6 +331,8 @@ class AsanaClient:
         assignee: str = None,
         due_on: str = None,
         notes: str = None,
+        html_notes: str = None,
+        custom_fields: dict = None,
     ) -> dict:
         """Update a task."""
         data = {}
@@ -322,6 +347,10 @@ class AsanaClient:
             data["due_on"] = due_on
         if notes is not None:
             data["notes"] = notes
+        if html_notes is not None:
+            data["html_notes"] = html_notes
+        if custom_fields is not None:
+            data["custom_fields"] = custom_fields
 
         if not data:
             raise ValueError("No updates provided")
@@ -362,17 +391,20 @@ class AsanaClient:
         result = self._request("POST", f"tasks/{parent_gid}/subtasks", json_data={"data": data})
         return result.get("data", {})
 
-    # ========== Comment Operations ==========
+    # ========== Story/Comment Operations ==========
 
-    def get_comments(self, task_gid: str, limit: int = 50) -> List[dict]:
-        """Get comments on a task."""
+    def get_stories(self, task_gid: str, limit: int = 50, opt_fields: str = None) -> List[dict]:
+        """Get all stories (comments, activity) for a task."""
         params = {
-            "opt_fields": "created_at,created_by.name,text,type,resource_subtype",
+            "opt_fields": opt_fields or "created_at,created_by.name,text,type,resource_subtype",
             "limit": str(limit),
         }
         result = self._request("GET", f"tasks/{task_gid}/stories", params)
-        # Filter to just comments
-        stories = result.get("data", [])
+        return result.get("data", [])
+
+    def get_comments(self, task_gid: str, limit: int = 50) -> List[dict]:
+        """Get comments on a task (filtered from stories)."""
+        stories = self.get_stories(task_gid, limit)
         return [s for s in stories if s.get("resource_subtype") == "comment_added"]
 
     def add_comment(self, task_gid: str, text: str) -> dict:
@@ -399,6 +431,51 @@ class AsanaClient:
             json_data={"data": {"dependencies": [depends_on_gid]}},
         )
         return result.get("data", {})
+
+    def add_dependencies(self, task_gid: str, depends_on_gids: List[str]) -> dict:
+        """Add multiple dependencies to a task."""
+        if not depends_on_gids:
+            return {}
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/addDependencies",
+            json_data={"data": {"dependencies": depends_on_gids}},
+        )
+        return result.get("data", {})
+
+    def remove_dependency(self, task_gid: str, depends_on_gid: str) -> dict:
+        """Remove a dependency from a task."""
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/removeDependencies",
+            json_data={"data": {"dependencies": [depends_on_gid]}},
+        )
+        return result.get("data", {})
+
+    def get_dependents(self, task_gid: str) -> List[dict]:
+        """Get tasks that depend on this task."""
+        result = self._request(
+            "GET",
+            f"tasks/{task_gid}/dependents",
+            params={"opt_fields": "name,completed,gid"},
+        )
+        return result.get("data", [])
+
+    def chain_dependencies(self, task_gids: List[str]) -> int:
+        """
+        Chain tasks sequentially so each depends on the previous.
+        Given [A, B, C, D], creates: B depends on A, C depends on B, D depends on C.
+        Returns number of dependencies created.
+        """
+        if len(task_gids) < 2:
+            return 0
+
+        count = 0
+        for i in range(1, len(task_gids)):
+            self.add_dependency(task_gids[i], task_gids[i - 1])
+            count += 1
+
+        return count
 
     # ========== User Operations ==========
 
@@ -590,6 +667,39 @@ def cmd_subtasks(client: AsanaClient, args):
         print(format_task(task))
 
 
+def cmd_sections(client: AsanaClient, args):
+    """List project sections."""
+    sections = client.get_project_sections(args.project_gid)
+    if args.json:
+        print(json.dumps(sections, indent=2))
+        return
+
+    print(f"{'GID':<20} {'Section Name'}")
+    print("-" * 50)
+    for s in sections:
+        print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+
+
+def cmd_stories(client: AsanaClient, args):
+    """Get task stories (activity history)."""
+    stories = client.get_stories(args.task_gid, limit=args.limit)
+    if args.json:
+        print(json.dumps(stories, indent=2))
+        return
+
+    print(f"Stories for task {args.task_gid}:\n")
+    for s in stories:
+        stype = s.get("resource_subtype", s.get("type", "unknown"))
+        author = (s.get("created_by") or {}).get("name", "System")
+        created = s.get("created_at", "")[:10]
+        text = s.get("text", "")[:100]
+
+        if stype == "comment_added":
+            print(f"[{created}] {author}: {text}")
+        elif text:
+            print(f"[{created}] ({stype}) {text}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Asana CLI - Direct REST API client",
@@ -664,6 +774,17 @@ def main():
     subtasks = subparsers.add_parser("subtasks", help="Get subtasks")
     subtasks.add_argument("task_gid", help="Task GID")
     subtasks.set_defaults(func=cmd_subtasks)
+
+    # sections
+    sections = subparsers.add_parser("sections", help="List project sections")
+    sections.add_argument("project_gid", help="Project GID")
+    sections.set_defaults(func=cmd_sections)
+
+    # stories
+    stories = subparsers.add_parser("stories", help="Get task stories (activity)")
+    stories.add_argument("task_gid", help="Task GID")
+    stories.add_argument("-l", "--limit", type=int, default=50)
+    stories.set_defaults(func=cmd_stories)
 
     args = parser.parse_args()
 
