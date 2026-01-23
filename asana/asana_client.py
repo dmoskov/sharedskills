@@ -484,6 +484,199 @@ class AsanaClient:
         result = self._request("GET", "users/me", {"opt_fields": "name,email,workspaces.name"})
         return result.get("data", {})
 
+    # ========== Portfolio Operations ==========
+
+    def get_portfolio(self, portfolio_gid: str, opt_fields: str = None) -> dict:
+        """Get portfolio details."""
+        params = {
+            "opt_fields": opt_fields or "name,owner.name,color,created_at,current_status_update.status,members.name"
+        }
+        result = self._request("GET", f"portfolios/{portfolio_gid}", params)
+        return result.get("data", {})
+
+    def get_portfolios(
+        self,
+        workspace: str = None,
+        owner: str = "me",
+        limit: int = 50,
+    ) -> List[dict]:
+        """List portfolios in workspace."""
+        params = {
+            "workspace": self._get_workspace(workspace),
+            "owner": owner,
+            "opt_fields": "name,owner.name,color",
+            "limit": str(limit),
+        }
+        result = self._request("GET", "portfolios", params)
+        return result.get("data", [])
+
+    def get_portfolio_items(self, portfolio_gid: str, limit: int = 100) -> List[dict]:
+        """Get items (projects) in a portfolio."""
+        params = {
+            "opt_fields": "name,resource_type,owner.name,current_status.color,due_on",
+            "limit": str(limit),
+        }
+        result = self._request("GET", f"portfolios/{portfolio_gid}/items", params)
+        return result.get("data", [])
+
+    # ========== Team Operations ==========
+
+    def get_teams(self, organization: str = None, limit: int = 100) -> List[dict]:
+        """List teams in an organization/workspace."""
+        ws = self._get_workspace(organization)
+        params = {
+            "opt_fields": "name,description,organization.name",
+            "limit": str(limit),
+        }
+        result = self._request("GET", f"organizations/{ws}/teams", params)
+        return result.get("data", [])
+
+    def get_team(self, team_gid: str, opt_fields: str = None) -> dict:
+        """Get team details."""
+        params = {
+            "opt_fields": opt_fields or "name,description,organization.name,html_description"
+        }
+        result = self._request("GET", f"teams/{team_gid}", params)
+        return result.get("data", {})
+
+    def get_team_members(self, team_gid: str, limit: int = 100) -> List[dict]:
+        """Get members of a team."""
+        params = {
+            "opt_fields": "name,email",
+            "limit": str(limit),
+        }
+        result = self._request("GET", f"teams/{team_gid}/users", params)
+        return result.get("data", [])
+
+    # ========== Tag Operations ==========
+
+    def get_tags(self, workspace: str = None, limit: int = 100) -> List[dict]:
+        """List tags in workspace."""
+        params = {
+            "workspace": self._get_workspace(workspace),
+            "opt_fields": "name,color,notes",
+            "limit": str(limit),
+        }
+        result = self._request("GET", "tags", params)
+        return result.get("data", [])
+
+    def get_tag(self, tag_gid: str) -> dict:
+        """Get tag details."""
+        params = {"opt_fields": "name,color,notes,followers.name"}
+        result = self._request("GET", f"tags/{tag_gid}", params)
+        return result.get("data", {})
+
+    def create_tag(
+        self,
+        name: str,
+        workspace: str = None,
+        color: str = None,
+        notes: str = None,
+    ) -> dict:
+        """Create a new tag."""
+        data = {
+            "name": name,
+            "workspace": self._get_workspace(workspace),
+        }
+        if color:
+            data["color"] = color
+        if notes:
+            data["notes"] = notes
+
+        result = self._request("POST", "tags", json_data={"data": data})
+        return result.get("data", {})
+
+    def update_tag(
+        self,
+        tag_gid: str,
+        name: str = None,
+        color: str = None,
+        notes: str = None,
+    ) -> dict:
+        """Update a tag."""
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if color is not None:
+            data["color"] = color
+        if notes is not None:
+            data["notes"] = notes
+
+        if not data:
+            raise ValueError("No updates provided")
+
+        result = self._request("PUT", f"tags/{tag_gid}", json_data={"data": data})
+        return result.get("data", {})
+
+    def delete_tag(self, tag_gid: str) -> bool:
+        """Delete a tag."""
+        self._request("DELETE", f"tags/{tag_gid}")
+        return True
+
+    def add_tag_to_task(self, task_gid: str, tag_gid: str) -> dict:
+        """Add a tag to a task."""
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/addTag",
+            json_data={"data": {"tag": tag_gid}},
+        )
+        return result.get("data", {})
+
+    def remove_tag_from_task(self, task_gid: str, tag_gid: str) -> dict:
+        """Remove a tag from a task."""
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/removeTag",
+            json_data={"data": {"tag": tag_gid}},
+        )
+        return result.get("data", {})
+
+    # ========== Section Operations (CRUD) ==========
+
+    def create_section(self, project_gid: str, name: str, insert_before: str = None, insert_after: str = None) -> dict:
+        """Create a section in a project."""
+        data = {"name": name}
+        if insert_before:
+            data["insert_before"] = insert_before
+        if insert_after:
+            data["insert_after"] = insert_after
+
+        result = self._request(
+            "POST",
+            f"projects/{project_gid}/sections",
+            json_data={"data": data},
+        )
+        return result.get("data", {})
+
+    def update_section(self, section_gid: str, name: str) -> dict:
+        """Update a section's name."""
+        result = self._request(
+            "PUT",
+            f"sections/{section_gid}",
+            json_data={"data": {"name": name}},
+        )
+        return result.get("data", {})
+
+    def delete_section(self, section_gid: str) -> bool:
+        """Delete a section."""
+        self._request("DELETE", f"sections/{section_gid}")
+        return True
+
+    def move_section(self, project_gid: str, section_gid: str, before_section: str = None, after_section: str = None) -> dict:
+        """Move/reorder a section within a project."""
+        data = {"section": section_gid}
+        if before_section:
+            data["before_section"] = before_section
+        if after_section:
+            data["after_section"] = after_section
+
+        result = self._request(
+            "POST",
+            f"projects/{project_gid}/sections/insert",
+            json_data={"data": data},
+        )
+        return result.get("data", {})
+
 
 # ========== CLI ==========
 
