@@ -660,6 +660,98 @@ class TestAttachmentOperationsWithMocks(unittest.TestCase):
                 file_content=b"bytes"  # Both provided
             )
 
+    def test_upload_requires_filename_for_content(self):
+        """Test upload_attachment_to_task requires file_name when using file_content."""
+        from asana_sdk.attachments import upload_attachment_to_task
+
+        with self.assertRaises(ValueError) as ctx:
+            upload_attachment_to_task("task123", file_content=b"test bytes")
+        self.assertIn("file_name is required", str(ctx.exception))
+
+    @patch("asana_sdk.attachments.get_client")
+    @patch("asana_sdk.attachments.ASANA_SDK_AVAILABLE", True)
+    def test_get_attachment(self, mock_get_client):
+        """Test getting a single attachment."""
+        from asana_sdk.attachments import get_attachment
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_att = MagicMock()
+        mock_att.to_dict.return_value = {
+            "gid": "att1",
+            "name": "document.pdf",
+            "download_url": "https://example.com/download"
+        }
+
+        mock_attachments_api = MagicMock()
+        mock_attachments_api.get_attachment.return_value = mock_att
+
+        with patch("asana_sdk.attachments.asana") as mock_asana:
+            mock_asana.AttachmentsApi.return_value = mock_attachments_api
+
+            result = get_attachment("att1")
+
+        self.assertEqual(result["gid"], "att1")
+        self.assertEqual(result["name"], "document.pdf")
+        self.assertIn("download_url", result)
+
+    @patch("asana_sdk.attachments.get_client")
+    @patch("asana_sdk.attachments.ASANA_SDK_AVAILABLE", True)
+    def test_delete_attachment(self, mock_get_client):
+        """Test deleting an attachment."""
+        from asana_sdk.attachments import delete_attachment
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        mock_attachments_api = MagicMock()
+        mock_attachments_api.delete_attachment.return_value = None
+
+        with patch("asana_sdk.attachments.asana") as mock_asana:
+            mock_asana.AttachmentsApi.return_value = mock_attachments_api
+
+            result = delete_attachment("att1")
+
+        self.assertTrue(result)
+        mock_attachments_api.delete_attachment.assert_called_once_with("att1")
+
+    def test_delete_attachment_validates_input(self):
+        """Test delete_attachment validates attachment_gid."""
+        from asana_sdk.attachments import delete_attachment
+
+        with self.assertRaises(ValueError):
+            delete_attachment("")
+
+    @patch("asana_sdk.attachments.get_attachment")
+    @patch("asana_sdk.attachments.urllib.request.urlopen")
+    def test_download_attachment(self, mock_urlopen, mock_get_attachment):
+        """Test downloading an attachment."""
+        from asana_sdk.attachments import download_attachment
+
+        mock_get_attachment.return_value = {
+            "gid": "att1",
+            "download_url": "https://example.com/file.pdf"
+        }
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"file content bytes"
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_response
+
+        result = download_attachment("att1")
+
+        self.assertEqual(result, b"file content bytes")
+        mock_get_attachment.assert_called_once_with("att1")
+
+    def test_download_attachment_validates_input(self):
+        """Test download_attachment validates attachment_gid."""
+        from asana_sdk.attachments import download_attachment
+
+        with self.assertRaises(ValueError):
+            download_attachment("")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2,6 +2,35 @@
 
 Direct REST API client for Asana task management. All operations have 30-second timeouts and automatic retries.
 
+## Architecture
+
+This directory contains two complementary clients:
+
+| | `asana_client.py` | `asana_sdk/` |
+|---|---|---|
+| **Purpose** | Primary client for most operations | Extended features via official SDK |
+| **Dependencies** | `requests` only | Official `asana` package |
+| **Auth** | Personal Access Token | OAuth with auto-refresh |
+| **Use when** | CLI usage, simple scripts, most tasks | Custom fields, attachments, goals |
+
+**Start with `asana_client.py`** - it covers 90% of use cases with zero SDK dependency. Use `asana_sdk/` only for features not in the standalone client.
+
+### Feature Matrix
+
+| Feature | `asana_client.py` | `asana_sdk/` |
+|---------|:-----------------:|:------------:|
+| Tasks (CRUD, search, subtasks) | ✓ | ✓ |
+| Projects & Sections | ✓ | ✓ |
+| Dependencies | ✓ | ✓ |
+| Comments/Stories | ✓ | ✓ |
+| Portfolios | ✓ | - |
+| Teams | ✓ | - |
+| Tags (CRUD) | ✓ | - |
+| Custom field caching | - | ✓ |
+| Attachments (upload/download) | - | ✓ |
+| Goals | - | ✓ |
+| OAuth token refresh | - | ✓ |
+
 ## Features
 
 - 30-second timeouts on all requests (vs MCP tools that can hang)
@@ -211,9 +240,44 @@ client.remove_dependency("task_gid", "depends_on_gid")
 dependents = client.get_dependents("task_gid")
 ```
 
-## Advanced: Using the Official SDK
+## Using asana_sdk/
 
-For features not covered by `asana_client.py`, use the official SDK with managed auth:
+For features not in `asana_client.py` (custom fields, attachments, goals), use the SDK wrapper:
+
+```bash
+pip install asana  # Required for asana_sdk/
+```
+
+### Custom Field Caching
+
+```python
+from asana_sdk import (
+    preload_custom_fields_cache,
+    get_custom_field_gid,
+    get_enum_option_gid,
+)
+
+# Cache custom fields for a project (avoids repeated API calls)
+preload_custom_fields_cache("project_gid")
+
+# Look up field and enum GIDs by name
+field_gid = get_custom_field_gid("project_gid", "Priority")
+enum_gid = get_enum_option_gid("project_gid", "Priority", "High")
+```
+
+### Attachments
+
+```python
+from asana_sdk import upload_attachment_to_task, download_attachment
+
+# Upload a file to a task
+attachment = upload_attachment_to_task("task_gid", "/path/to/file.pdf")
+
+# Download an attachment
+download_attachment("attachment_gid", "/path/to/output.pdf")
+```
+
+### Goals & Other SDK Features
 
 ```python
 from asana_sdk import get_client
@@ -222,7 +286,7 @@ import asana
 # Get client with OAuth token management
 client = get_client()
 
-# Use any SDK API directly
+# Use any official SDK API
 goals_api = asana.GoalsApi(client)
 goals = goals_api.get_goals(opts={"workspace": "workspace_gid"})
 ```

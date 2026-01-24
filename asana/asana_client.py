@@ -34,7 +34,7 @@ import json
 import logging
 import os
 import sys
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import requests
@@ -103,7 +103,7 @@ class AsanaClient:
         params: dict = None,
         json_data: dict = None,
         retries: int = MAX_RETRIES,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Make authenticated request with retry logic."""
         headers = {"Authorization": f"Bearer {self._token}"}
         url = f"{ASANA_BASE_URL}/{endpoint}"
@@ -133,8 +133,11 @@ class AsanaClient:
                         error_detail = "; ".join(
                             e.get("message", str(e)) for e in error_json["errors"]
                         )
-                except Exception:
-                    error_detail = resp.text[:200]
+                    elif "error" in error_json:
+                        error_detail = error_json["error"]
+                except json.JSONDecodeError:
+                    # Response is not JSON - use raw text
+                    error_detail = resp.text[:500] if resp.text else "No error details"
 
                 raise AsanaAPIError(f"API error {resp.status_code}: {error_detail}", resp.status_code)
 
@@ -168,14 +171,14 @@ class AsanaClient:
 
     # ========== Workspace Operations ==========
 
-    def list_workspaces(self) -> List[dict]:
+    def list_workspaces(self) -> List[Dict[str, Any]]:
         """List all accessible workspaces."""
         result = self._request("GET", "workspaces", {"opt_fields": "name,is_organization"})
         return result.get("data", [])
 
     # ========== Project Operations ==========
 
-    def get_project(self, project_gid: str, opt_fields: str = None) -> dict:
+    def get_project(self, project_gid: str, opt_fields: str = None) -> Dict[str, Any]:
         """Get project details."""
         params = {
             "opt_fields": opt_fields or "name,notes,owner.name,due_on,current_status.color,custom_fields"
@@ -188,7 +191,7 @@ class AsanaClient:
         workspace: str = None,
         archived: bool = False,
         limit: int = 50,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """List projects in workspace."""
         params = {
             "workspace": self._get_workspace(workspace),
@@ -199,14 +202,14 @@ class AsanaClient:
         result = self._request("GET", "projects", params)
         return result.get("data", [])
 
-    def get_project_sections(self, project_gid: str) -> List[dict]:
+    def get_project_sections(self, project_gid: str) -> List[Dict[str, Any]]:
         """Get sections in a project."""
         result = self._request("GET", f"projects/{project_gid}/sections", {"opt_fields": "name"})
         return result.get("data", [])
 
     # ========== Task Operations ==========
 
-    def get_task(self, task_gid: str) -> dict:
+    def get_task(self, task_gid: str) -> Dict[str, Any]:
         """Get task details."""
         params = {
             "opt_fields": "name,notes,due_on,completed,assignee.name,projects.name,"
@@ -224,7 +227,7 @@ class AsanaClient:
         workspace: str = None,
         completed: bool = None,
         limit: int = 100,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """Get tasks from project, section, or by assignee."""
         params = {
             "opt_fields": "name,due_on,completed,assignee.name,projects.name",
@@ -256,7 +259,7 @@ class AsanaClient:
         projects: str = None,
         completed: bool = None,
         limit: int = 100,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """Search tasks with filters."""
         params = {
             "opt_fields": "name,due_on,completed,assignee.name,projects.name",
@@ -281,16 +284,35 @@ class AsanaClient:
     def create_task(
         self,
         name: str,
-        project: str = None,
-        section: str = None,
-        assignee: str = None,
-        due_on: str = None,
-        notes: str = None,
-        html_notes: str = None,
-        custom_fields: dict = None,
-        workspace: str = None,
-    ) -> dict:
-        """Create a new task."""
+        project: Optional[str] = None,
+        section: Optional[str] = None,
+        assignee: Optional[str] = None,
+        due_on: Optional[str] = None,
+        notes: Optional[str] = None,
+        html_notes: Optional[str] = None,
+        custom_fields: Optional[Dict[str, Any]] = None,
+        workspace: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a new task.
+
+        Args:
+            name: Task name (required)
+            project: Project GID to add task to
+            section: Section GID to place task in (requires project)
+            assignee: User GID or 'me' to assign the task
+            due_on: Due date in YYYY-MM-DD format
+            notes: Plain text description
+            html_notes: HTML description (use instead of notes, not both)
+            custom_fields: Dict mapping custom field GIDs to values
+            workspace: Workspace GID (auto-detected if not provided)
+
+        Returns:
+            Created task data including 'gid' and 'name'
+
+        Raises:
+            AsanaAPIError: If the API request fails
+        """
         data = {"name": name}
 
         if project:
@@ -326,14 +348,14 @@ class AsanaClient:
     def update_task(
         self,
         task_gid: str,
-        name: str = None,
-        completed: bool = None,
-        assignee: str = None,
-        due_on: str = None,
-        notes: str = None,
-        html_notes: str = None,
-        custom_fields: dict = None,
-    ) -> dict:
+        name: Optional[str] = None,
+        completed: Optional[bool] = None,
+        assignee: Optional[str] = None,
+        due_on: Optional[str] = None,
+        notes: Optional[str] = None,
+        html_notes: Optional[str] = None,
+        custom_fields: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Update a task."""
         data = {}
 
@@ -365,7 +387,7 @@ class AsanaClient:
 
     # ========== Subtask Operations ==========
 
-    def get_subtasks(self, task_gid: str) -> List[dict]:
+    def get_subtasks(self, task_gid: str) -> List[Dict[str, Any]]:
         """Get subtasks of a task."""
         params = {"opt_fields": "name,completed,due_on,assignee.name"}
         result = self._request("GET", f"tasks/{task_gid}/subtasks", params)
@@ -378,7 +400,7 @@ class AsanaClient:
         assignee: str = None,
         due_on: str = None,
         notes: str = None,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Create a subtask."""
         data = {"name": name}
         if assignee:
@@ -393,7 +415,7 @@ class AsanaClient:
 
     # ========== Story/Comment Operations ==========
 
-    def get_stories(self, task_gid: str, limit: int = 50, opt_fields: str = None) -> List[dict]:
+    def get_stories(self, task_gid: str, limit: int = 50, opt_fields: str = None) -> List[Dict[str, Any]]:
         """Get all stories (comments, activity) for a task."""
         params = {
             "opt_fields": opt_fields or "created_at,created_by.name,text,type,resource_subtype",
@@ -402,12 +424,12 @@ class AsanaClient:
         result = self._request("GET", f"tasks/{task_gid}/stories", params)
         return result.get("data", [])
 
-    def get_comments(self, task_gid: str, limit: int = 50) -> List[dict]:
+    def get_comments(self, task_gid: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Get comments on a task (filtered from stories)."""
         stories = self.get_stories(task_gid, limit)
         return [s for s in stories if s.get("resource_subtype") == "comment_added"]
 
-    def add_comment(self, task_gid: str, text: str) -> dict:
+    def add_comment(self, task_gid: str, text: str) -> Dict[str, Any]:
         """Add a comment to a task."""
         result = self._request(
             "POST", f"tasks/{task_gid}/stories", json_data={"data": {"text": text}}
@@ -416,14 +438,14 @@ class AsanaClient:
 
     # ========== Dependency Operations ==========
 
-    def get_dependencies(self, task_gid: str) -> List[dict]:
+    def get_dependencies(self, task_gid: str) -> List[Dict[str, Any]]:
         """Get tasks that this task depends on."""
         result = self._request(
             "GET", f"tasks/{task_gid}/dependencies", {"opt_fields": "name,completed"}
         )
         return result.get("data", [])
 
-    def add_dependency(self, task_gid: str, depends_on_gid: str) -> dict:
+    def add_dependency(self, task_gid: str, depends_on_gid: str) -> Dict[str, Any]:
         """Make task depend on another task."""
         result = self._request(
             "POST",
@@ -432,7 +454,7 @@ class AsanaClient:
         )
         return result.get("data", {})
 
-    def add_dependencies(self, task_gid: str, depends_on_gids: List[str]) -> dict:
+    def add_dependencies(self, task_gid: str, depends_on_gids: List[str]) -> Dict[str, Any]:
         """Add multiple dependencies to a task."""
         if not depends_on_gids:
             return {}
@@ -443,7 +465,7 @@ class AsanaClient:
         )
         return result.get("data", {})
 
-    def remove_dependency(self, task_gid: str, depends_on_gid: str) -> dict:
+    def remove_dependency(self, task_gid: str, depends_on_gid: str) -> Dict[str, Any]:
         """Remove a dependency from a task."""
         result = self._request(
             "POST",
@@ -452,7 +474,7 @@ class AsanaClient:
         )
         return result.get("data", {})
 
-    def get_dependents(self, task_gid: str) -> List[dict]:
+    def get_dependents(self, task_gid: str) -> List[Dict[str, Any]]:
         """Get tasks that depend on this task."""
         result = self._request(
             "GET",
@@ -479,14 +501,14 @@ class AsanaClient:
 
     # ========== User Operations ==========
 
-    def get_me(self) -> dict:
+    def get_me(self) -> Dict[str, Any]:
         """Get current user info."""
         result = self._request("GET", "users/me", {"opt_fields": "name,email,workspaces.name"})
         return result.get("data", {})
 
     # ========== Portfolio Operations ==========
 
-    def get_portfolio(self, portfolio_gid: str, opt_fields: str = None) -> dict:
+    def get_portfolio(self, portfolio_gid: str, opt_fields: str = None) -> Dict[str, Any]:
         """Get portfolio details."""
         params = {
             "opt_fields": opt_fields or "name,owner.name,color,created_at,current_status_update.status,members.name"
@@ -499,7 +521,7 @@ class AsanaClient:
         workspace: str = None,
         owner: str = "me",
         limit: int = 50,
-    ) -> List[dict]:
+    ) -> List[Dict[str, Any]]:
         """List portfolios in workspace."""
         params = {
             "workspace": self._get_workspace(workspace),
@@ -510,7 +532,7 @@ class AsanaClient:
         result = self._request("GET", "portfolios", params)
         return result.get("data", [])
 
-    def get_portfolio_items(self, portfolio_gid: str, limit: int = 100) -> List[dict]:
+    def get_portfolio_items(self, portfolio_gid: str, limit: int = 100) -> List[Dict[str, Any]]:
         """Get items (projects) in a portfolio."""
         params = {
             "opt_fields": "name,resource_type,owner.name,current_status.color,due_on",
@@ -521,7 +543,7 @@ class AsanaClient:
 
     # ========== Team Operations ==========
 
-    def get_teams(self, organization: str = None, limit: int = 100) -> List[dict]:
+    def get_teams(self, organization: str = None, limit: int = 100) -> List[Dict[str, Any]]:
         """List teams in an organization/workspace."""
         ws = self._get_workspace(organization)
         params = {
@@ -531,7 +553,7 @@ class AsanaClient:
         result = self._request("GET", f"organizations/{ws}/teams", params)
         return result.get("data", [])
 
-    def get_team(self, team_gid: str, opt_fields: str = None) -> dict:
+    def get_team(self, team_gid: str, opt_fields: str = None) -> Dict[str, Any]:
         """Get team details."""
         params = {
             "opt_fields": opt_fields or "name,description,organization.name,html_description"
@@ -539,7 +561,7 @@ class AsanaClient:
         result = self._request("GET", f"teams/{team_gid}", params)
         return result.get("data", {})
 
-    def get_team_members(self, team_gid: str, limit: int = 100) -> List[dict]:
+    def get_team_members(self, team_gid: str, limit: int = 100) -> List[Dict[str, Any]]:
         """Get members of a team."""
         params = {
             "opt_fields": "name,email",
@@ -550,7 +572,7 @@ class AsanaClient:
 
     # ========== Tag Operations ==========
 
-    def get_tags(self, workspace: str = None, limit: int = 100) -> List[dict]:
+    def get_tags(self, workspace: str = None, limit: int = 100) -> List[Dict[str, Any]]:
         """List tags in workspace."""
         params = {
             "workspace": self._get_workspace(workspace),
@@ -560,7 +582,7 @@ class AsanaClient:
         result = self._request("GET", "tags", params)
         return result.get("data", [])
 
-    def get_tag(self, tag_gid: str) -> dict:
+    def get_tag(self, tag_gid: str) -> Dict[str, Any]:
         """Get tag details."""
         params = {"opt_fields": "name,color,notes,followers.name"}
         result = self._request("GET", f"tags/{tag_gid}", params)
@@ -572,7 +594,7 @@ class AsanaClient:
         workspace: str = None,
         color: str = None,
         notes: str = None,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Create a new tag."""
         data = {
             "name": name,
@@ -592,7 +614,7 @@ class AsanaClient:
         name: str = None,
         color: str = None,
         notes: str = None,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """Update a tag."""
         data = {}
         if name is not None:
@@ -613,7 +635,7 @@ class AsanaClient:
         self._request("DELETE", f"tags/{tag_gid}")
         return True
 
-    def add_tag_to_task(self, task_gid: str, tag_gid: str) -> dict:
+    def add_tag_to_task(self, task_gid: str, tag_gid: str) -> Dict[str, Any]:
         """Add a tag to a task."""
         result = self._request(
             "POST",
@@ -622,7 +644,7 @@ class AsanaClient:
         )
         return result.get("data", {})
 
-    def remove_tag_from_task(self, task_gid: str, tag_gid: str) -> dict:
+    def remove_tag_from_task(self, task_gid: str, tag_gid: str) -> Dict[str, Any]:
         """Remove a tag from a task."""
         result = self._request(
             "POST",
@@ -633,7 +655,7 @@ class AsanaClient:
 
     # ========== Section Operations (CRUD) ==========
 
-    def create_section(self, project_gid: str, name: str, insert_before: str = None, insert_after: str = None) -> dict:
+    def create_section(self, project_gid: str, name: str, insert_before: str = None, insert_after: str = None) -> Dict[str, Any]:
         """Create a section in a project."""
         data = {"name": name}
         if insert_before:
@@ -648,7 +670,7 @@ class AsanaClient:
         )
         return result.get("data", {})
 
-    def update_section(self, section_gid: str, name: str) -> dict:
+    def update_section(self, section_gid: str, name: str) -> Dict[str, Any]:
         """Update a section's name."""
         result = self._request(
             "PUT",
@@ -662,7 +684,7 @@ class AsanaClient:
         self._request("DELETE", f"sections/{section_gid}")
         return True
 
-    def move_section(self, project_gid: str, section_gid: str, before_section: str = None, after_section: str = None) -> dict:
+    def move_section(self, project_gid: str, section_gid: str, before_section: str = None, after_section: str = None) -> Dict[str, Any]:
         """Move/reorder a section within a project."""
         data = {"section": section_gid}
         if before_section:
