@@ -41,9 +41,28 @@ This directory contains two complementary clients:
 
 ## Setup
 
-1. Get a Personal Access Token from https://app.asana.com/0/my-apps
-2. Set the environment variable: `export ASANA_ACCESS_TOKEN=your_token_here`
-3. Optionally set default workspace: `export ASANA_WORKSPACE=your_workspace_gid`
+### Option 1: OAuth (Recommended)
+
+OAuth tokens auto-refresh and are more secure than Personal Access Tokens.
+
+```bash
+# One-time setup
+python3 oauth_setup.py
+```
+
+This will:
+1. Prompt for your Asana app credentials (create at https://app.asana.com/0/my-apps)
+2. Open browser for authorization
+3. Save tokens to `~/.config/asana/tokens.json`
+
+### Option 2: Personal Access Token
+
+```bash
+export ASANA_ACCESS_TOKEN=your_token_here
+export ASANA_WORKSPACE=your_workspace_gid  # optional
+```
+
+Get a PAT from https://app.asana.com/0/my-apps
 
 See [SETUP.md](SETUP.md) for detailed instructions.
 
