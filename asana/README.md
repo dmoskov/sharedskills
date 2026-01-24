@@ -10,7 +10,7 @@ This directory contains two complementary clients:
 |---|---|---|
 | **Purpose** | Primary client for most operations | Extended features via official SDK |
 | **Dependencies** | `requests` only | Official `asana` package |
-| **Auth** | Personal Access Token | OAuth with auto-refresh |
+| **Auth** | OAuth (recommended) or PAT | OAuth with auto-refresh |
 | **Use when** | CLI usage, simple scripts, most tasks | Custom fields, attachments, goals |
 
 **Start with `asana_client.py`** - it covers 90% of use cases with zero SDK dependency. Use `asana_sdk/` only for features not in the standalone client.
@@ -26,10 +26,10 @@ This directory contains two complementary clients:
 | Portfolios | ✓ | - |
 | Teams | ✓ | - |
 | Tags (CRUD) | ✓ | - |
+| OAuth with auto-refresh | ✓ | ✓ |
 | Custom field caching | - | ✓ |
 | Attachments (upload/download) | - | ✓ |
 | Goals | - | ✓ |
-| OAuth token refresh | - | ✓ |
 
 ## Features
 
@@ -45,17 +45,37 @@ This directory contains two complementary clients:
 
 OAuth tokens auto-refresh and are more secure than Personal Access Tokens.
 
+**Step 1: Create an Asana App**
+
+1. Go to https://app.asana.com/0/my-apps
+2. Click **"Create new app"**
+3. Name it (e.g., "CLI Tool")
+4. In OAuth settings, add redirect URL: `http://localhost:8765/callback`
+5. Save and note your **Client ID** and **Client Secret**
+
+**Step 2: Run OAuth Setup**
+
 ```bash
-# One-time setup
 python3 oauth_setup.py
 ```
 
-This will:
-1. Prompt for your Asana app credentials (create at https://app.asana.com/0/my-apps)
-2. Open browser for authorization
-3. Save tokens to `~/.config/asana/tokens.json`
+The script will:
+- Prompt for your Client ID and Client Secret (saved for future use)
+- Open browser for you to authorize
+- Capture the callback and exchange for tokens
+- Save tokens to `~/.config/asana/tokens.json`
+
+Tokens auto-refresh when expired - no manual intervention needed.
+
+**Step 3: Verify**
+
+```bash
+python3 asana_client.py workspaces
+```
 
 ### Option 2: Personal Access Token
+
+For quick testing (tokens don't auto-refresh):
 
 ```bash
 export ASANA_ACCESS_TOKEN=your_token_here
@@ -63,8 +83,6 @@ export ASANA_WORKSPACE=your_workspace_gid  # optional
 ```
 
 Get a PAT from https://app.asana.com/0/my-apps
-
-See [SETUP.md](SETUP.md) for detailed instructions.
 
 ## Quick Start
 
