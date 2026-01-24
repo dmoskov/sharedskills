@@ -81,10 +81,11 @@ class AsanaClient:
         Initialize client.
 
         Args:
-            token: Access token. If not provided, uses ASANA_ACCESS_TOKEN env var.
+            token: Access token. If not provided, checks ASANA_ACCESS_TOKEN env var,
+                   then falls back to OAuth tokens in ~/.config/asana/tokens.json
             workspace: Default workspace GID. If not provided, uses ASANA_WORKSPACE env var.
         """
-        self._token = token or os.environ.get("ASANA_ACCESS_TOKEN")
+        self._token = token or os.environ.get("ASANA_ACCESS_TOKEN") or self._load_oauth_token()
         self._workspace = workspace or os.environ.get("ASANA_WORKSPACE")
         self._session = requests.Session()
         self._session.headers["Accept"] = "application/json"
@@ -92,9 +93,83 @@ class AsanaClient:
         if not self._token:
             raise AsanaAuthError(
                 "No Asana token provided.\n"
-                "Set ASANA_ACCESS_TOKEN environment variable or pass token to constructor.\n"
-                "Get a Personal Access Token at: https://app.asana.com/0/my-apps"
+                "Options:\n"
+                "  1. Run: python3 oauth_setup.py  (recommended)\n"
+                "  2. Set ASANA_ACCESS_TOKEN environment variable\n"
+                "  3. Pass token to constructor"
             )
+
+    def _load_oauth_token(self) -> Optional[str]:
+        """Load OAuth token from ~/.config/asana/tokens.json if available."""
+        import time
+        token_file = os.path.expanduser("~/.config/asana/tokens.json")
+        if not os.path.exists(token_file):
+            return None
+
+        try:
+            with open(token_file) as f:
+                tokens = json.load(f)
+
+            # Check if token is expired
+            expires_at = tokens.get("expires_at", 0)
+            if time.time() > expires_at - 60:  # 60 second buffer
+                # Try to refresh
+                refreshed = self._refresh_oauth_token(tokens)
+                if refreshed:
+                    return refreshed
+                return None
+
+            return tokens.get("access_token")
+        except (json.JSONDecodeError, IOError, KeyError):
+            return None
+
+    def _refresh_oauth_token(self, tokens: dict) -> Optional[str]:
+        """Refresh OAuth token using refresh_token."""
+        import time
+        import urllib.request
+        import urllib.parse
+        import urllib.error
+
+        refresh_token = tokens.get("refresh_token")
+        client_id = tokens.get("client_id")
+        client_secret = tokens.get("client_secret")
+
+        if not all([refresh_token, client_id, client_secret]):
+            return None
+
+        try:
+            data = urllib.parse.urlencode({
+                "grant_type": "refresh_token",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "refresh_token": refresh_token,
+            }).encode()
+
+            req = urllib.request.Request(
+                "https://app.asana.com/-/oauth_token",
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                new_tokens = json.loads(resp.read())
+
+            # Update token file
+            tokens["access_token"] = new_tokens["access_token"]
+            tokens["expires_at"] = time.time() + new_tokens.get("expires_in", 3600)
+            if "refresh_token" in new_tokens:
+                tokens["refresh_token"] = new_tokens["refresh_token"]
+
+            token_file = os.path.expanduser("~/.config/asana/tokens.json")
+            with open(token_file, "w") as f:
+                json.dump(tokens, f, indent=2)
+
+            logger.info("OAuth token refreshed successfully")
+            return new_tokens["access_token"]
+
+        except (urllib.error.URLError, json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Failed to refresh OAuth token: {e}")
+            return None
 
     def _request(
         self,
