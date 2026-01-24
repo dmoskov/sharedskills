@@ -30,7 +30,15 @@ from asana_client import (
     AsanaError,
     AsanaAPIError,
     AsanaAuthError,
+    cmd_workspaces,
+    cmd_projects,
+    cmd_task,
+    cmd_tasks,
+    cmd_search,
+    cmd_my_tasks,
+    format_task,
 )
+from io import StringIO
 
 
 class TestClientInitialization:
@@ -1174,6 +1182,155 @@ class TestSectionCRUDOperations:
         json_data = call_args.kwargs.get("json") or call_args[1].get("json")
         assert json_data["data"]["section"] == "section1"
         assert json_data["data"]["after_section"] == "section2"
+
+
+class TestCLIIntegration:
+    """Tests for CLI command functions."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    @pytest.fixture
+    def mock_args(self):
+        """Create a mock args object."""
+        args = Mock()
+        args.json = False
+        args.verbose = False
+        return args
+
+    def test_format_task_incomplete(self):
+        """Should format incomplete task correctly."""
+        task = {"name": "Test Task", "due_on": "2025-01-31", "completed": False, "assignee": {"name": "Alice"}}
+        result = format_task(task)
+        assert "[ ]" in result
+        assert "Test Task" in result
+        assert "2025-01-31" in result
+        assert "Alice" in result
+
+    def test_format_task_completed(self):
+        """Should format completed task with checkmark."""
+        task = {"name": "Done Task", "due_on": None, "completed": True, "assignee": None}
+        result = format_task(task)
+        assert "[✓]" in result
+        assert "Done Task" in result
+
+    def test_format_task_verbose(self):
+        """Should include GID in verbose mode."""
+        task = {"gid": "123456", "name": "Task", "due_on": None, "completed": False, "assignee": None}
+        result = format_task(task, verbose=True)
+        assert "123456" in result
+
+    def test_cmd_workspaces(self, client, mock_args, capsys):
+        """Should print workspace list."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "ws1", "name": "Workspace 1", "is_organization": True},
+                {"gid": "ws2", "name": "Workspace 2", "is_organization": False}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_workspaces(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Workspace 1" in captured.out
+        assert "Workspace 2" in captured.out
+        assert "ws1" in captured.out
+
+    def test_cmd_workspaces_json(self, client, mock_args, capsys):
+        """Should output JSON when --json flag is set."""
+        mock_args.json = True
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [{"gid": "ws1", "name": "Test Workspace"}]
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_workspaces(client, mock_args)
+        captured = capsys.readouterr()
+
+        output = json.loads(captured.out)
+        assert output[0]["gid"] == "ws1"
+
+    def test_cmd_projects(self, client, mock_args, capsys):
+        """Should print project list."""
+        mock_args.archived = False
+        mock_args.limit = 50
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "p1", "name": "Project 1", "due_on": "2025-02-01"},
+                {"gid": "p2", "name": "Project 2", "due_on": None}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_projects(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Project 1" in captured.out
+        assert "Project 2" in captured.out
+
+    def test_cmd_task(self, client, mock_args, capsys):
+        """Should print task details."""
+        mock_args.task_gid = "task123"
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Important Task",
+                "completed": False,
+                "due_on": "2025-03-15",
+                "assignee": {"name": "Bob"},
+                "projects": [{"name": "Project X"}],
+                "notes": "Task description here"
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Important Task" in captured.out
+        assert "task123" in captured.out
+        assert "Bob" in captured.out
+        assert "Project X" in captured.out
+
+    def test_cmd_search(self, client, mock_args, capsys):
+        """Should print search results."""
+        mock_args.query = "bug"
+        mock_args.incomplete = True
+        mock_args.limit = 50
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"gid": "t1", "name": "Fix bug #1", "due_on": None, "completed": False, "assignee": None},
+                {"gid": "t2", "name": "Bug report", "due_on": "2025-01-20", "completed": False, "assignee": {"name": "Dev"}}
+            ]
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_search(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Fix bug #1" in captured.out
+        assert "Bug report" in captured.out
+        assert "(2 tasks)" in captured.out
 
 
 if __name__ == "__main__":
