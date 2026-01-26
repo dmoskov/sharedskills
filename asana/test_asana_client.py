@@ -1184,6 +1184,97 @@ class TestSectionCRUDOperations:
         assert json_data["data"]["after_section"] == "section2"
 
 
+class TestTaskMovementOperations:
+    """Tests for task movement and reparenting operations."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            client = AsanaClient(workspace="test_ws")
+            client._session = MagicMock()
+            return client
+
+    def test_move_task_to_section(self, client):
+        """Should move a task to a section."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        result = client.move_task_to_section("task1", "section1")
+
+        call_args = client._session.request.call_args
+        assert "sections/section1/addTask" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["task"] == "task1"
+
+    def test_move_task_to_section_with_position(self, client):
+        """Should move task with insert position."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": {}}
+        client._session.request.return_value = mock_response
+
+        client.move_task_to_section("task1", "section1", insert_after="task2")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["task"] == "task1"
+        assert json_data["data"]["insert_after"] == "task2"
+
+    def test_set_parent(self, client):
+        """Should set parent of a task (make it a subtask)."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Subtask", "parent": {"gid": "parent1"}}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.set_parent("task1", "parent1")
+
+        call_args = client._session.request.call_args
+        assert "tasks/task1/setParent" in call_args.kwargs.get("url", call_args[1].get("url", ""))
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["parent"] == "parent1"
+
+    def test_set_parent_remove(self, client):
+        """Should remove parent (make task standalone)."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Task", "parent": None}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.set_parent("task1", None)
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["parent"] is None
+
+    def test_set_parent_with_position(self, client):
+        """Should set parent with sibling position."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Subtask"}
+        }
+        client._session.request.return_value = mock_response
+
+        client.set_parent("task1", "parent1", insert_before="sibling1")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["parent"] == "parent1"
+        assert json_data["data"]["insert_before"] == "sibling1"
+
+
 class TestCLIIntegration:
     """Tests for CLI command functions."""
 
