@@ -488,6 +488,43 @@ class AsanaClient:
         result = self._request("POST", f"tasks/{parent_gid}/subtasks", json_data={"data": data})
         return result.get("data", {})
 
+    def set_parent(
+        self,
+        task_gid: str,
+        parent_gid: str = None,
+        insert_before: str = None,
+        insert_after: str = None,
+    ) -> Dict[str, Any]:
+        """
+        Set or remove the parent of a task (reparenting).
+
+        Args:
+            task_gid: The task to reparent.
+            parent_gid: New parent task GID, or None to remove parent.
+            insert_before: Position before this sibling subtask (optional).
+            insert_after: Position after this sibling subtask (optional).
+
+        Returns:
+            The updated task record.
+
+        Note:
+            - Only one of insert_before/insert_after can be specified.
+            - Subtasks do NOT inherit parent's projects.
+            - Maximum 5 levels of subtask nesting.
+        """
+        data = {"parent": parent_gid}
+        if insert_before:
+            data["insert_before"] = insert_before
+        elif insert_after:
+            data["insert_after"] = insert_after
+
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/setParent",
+            json_data={"data": data},
+        )
+        return result.get("data", {})
+
     # ========== Story/Comment Operations ==========
 
     def get_stories(self, task_gid: str, limit: int = 50, opt_fields: str = None) -> List[Dict[str, Any]]:
@@ -774,6 +811,38 @@ class AsanaClient:
         )
         return result.get("data", {})
 
+    def move_task_to_section(
+        self,
+        task_gid: str,
+        section_gid: str,
+        insert_before: str = None,
+        insert_after: str = None,
+    ) -> Dict[str, Any]:
+        """
+        Move a task to a section (removes from other sections in the project).
+
+        Args:
+            task_gid: The task to move.
+            section_gid: The destination section.
+            insert_before: Position before this task in section (optional).
+            insert_after: Position after this task in section (optional).
+
+        Returns:
+            Empty data dict on success.
+        """
+        data = {"task": task_gid}
+        if insert_before:
+            data["insert_before"] = insert_before
+        elif insert_after:
+            data["insert_after"] = insert_after
+
+        result = self._request(
+            "POST",
+            f"sections/{section_gid}/addTask",
+            json_data={"data": data},
+        )
+        return result.get("data", {})
+
 
 # ========== CLI ==========
 
@@ -922,6 +991,8 @@ def cmd_update(client: AsanaClient, args):
         updates["assignee"] = args.assignee
     if args.due:
         updates["due_on"] = args.due
+    if args.notes:
+        updates["notes"] = args.notes
 
     task = client.update_task(args.task_gid, **updates)
     if args.json:
@@ -990,6 +1061,39 @@ def cmd_stories(client: AsanaClient, args):
             print(f"[{created}] ({stype}) {text}")
 
 
+def cmd_move(client: AsanaClient, args):
+    """Move task to section."""
+    client.move_task_to_section(
+        task_gid=args.task_gid,
+        section_gid=args.section,
+        insert_before=args.before,
+        insert_after=args.after,
+    )
+    if args.json:
+        print(json.dumps({"success": True, "task": args.task_gid, "section": args.section}, indent=2))
+        return
+
+    print(f"Moved task {args.task_gid} to section {args.section}")
+
+
+def cmd_set_parent(client: AsanaClient, args):
+    """Set parent of a task (make it a subtask)."""
+    task = client.set_parent(
+        task_gid=args.task_gid,
+        parent_gid=args.parent if args.parent != "none" else None,
+        insert_before=args.before,
+        insert_after=args.after,
+    )
+    if args.json:
+        print(json.dumps(task, indent=2))
+        return
+
+    if args.parent and args.parent != "none":
+        print(f"Task {args.task_gid} is now a subtask of {args.parent}")
+    else:
+        print(f"Task {args.task_gid} is now a standalone task (parent removed)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Asana CLI - Direct REST API client",
@@ -1052,6 +1156,7 @@ def main():
     update.add_argument("-c", "--completed", help="true/false")
     update.add_argument("-a", "--assignee", help="Assignee")
     update.add_argument("-d", "--due", help="Due date")
+    update.add_argument("-n", "--notes", help="Description/notes")
     update.set_defaults(func=cmd_update)
 
     # comment
@@ -1075,6 +1180,22 @@ def main():
     stories.add_argument("task_gid", help="Task GID")
     stories.add_argument("-l", "--limit", type=int, default=50)
     stories.set_defaults(func=cmd_stories)
+
+    # move
+    move = subparsers.add_parser("move", help="Move task to section")
+    move.add_argument("task_gid", help="Task GID")
+    move.add_argument("-s", "--section", required=True, help="Destination section GID")
+    move.add_argument("--before", help="Insert before this task GID")
+    move.add_argument("--after", help="Insert after this task GID")
+    move.set_defaults(func=cmd_move)
+
+    # set-parent
+    setparent = subparsers.add_parser("set-parent", help="Set parent of task (make subtask)")
+    setparent.add_argument("task_gid", help="Task GID to reparent")
+    setparent.add_argument("-p", "--parent", required=True, help="Parent task GID (or 'none' to remove)")
+    setparent.add_argument("--before", help="Insert before this sibling subtask GID")
+    setparent.add_argument("--after", help="Insert after this sibling subtask GID")
+    setparent.set_defaults(func=cmd_set_parent)
 
     args = parser.parse_args()
 
