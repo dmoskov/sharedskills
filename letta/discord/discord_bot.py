@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import discord, aiohttp, os, sys, fcntl, json, asyncio
 from collections import defaultdict
+from datetime import datetime, timezone
 
 DEBOUNCE_SECONDS = 10  # Wait this long for more messages before responding
 
@@ -135,17 +136,28 @@ def main(bot_name):
         if not messages:
             return
 
-        # Combine messages from same channel
+        # Get location from first message (same for all in buffer)
+        first_meta = messages[0][0]
+        location = first_meta["location"]
+
+        # Format messages with metadata
+        def format_single(metadata, content):
+            parts = [f"[{metadata['timestamp']}] {metadata['author']}: {content}"]
+            if metadata["attachments"]:
+                parts.append(" ".join(metadata["attachments"]))
+            return " ".join(parts)
+
         if len(messages) == 1:
-            author, content, msg_obj = messages[0]
-            combined = f"[Discord message from {author}]: {content}"
+            metadata, content, msg_obj = messages[0]
+            msg_line = format_single(metadata, content)
+            combined = f"[Discord - {location}]\n{msg_line}"
         else:
             # Multiple messages - format as a batch
-            lines = [f"[{author}]: {content}" for author, content, _ in messages]
-            combined = f"[Discord messages - {len(messages)} messages in quick succession]:\n" + "\n".join(lines)
+            lines = [format_single(meta, content) for meta, content, _ in messages]
+            combined = f"[Discord - {location} - {len(messages)} messages]\n" + "\n".join(lines)
 
         last_msg = messages[-1][2]  # Reply to the last message
-        print(f"[{bot_name}] Flushing {len(messages)} message(s) from channel {channel_id}")
+        print(f"[{bot_name}] Flushing {len(messages)} message(s) from {location}")
 
         await call_letta_and_reply(combined, last_msg)
 
@@ -157,6 +169,40 @@ def main(bot_name):
     @client.event
     async def on_ready():
         print(f"READY [{bot_name}] {client.user} PID={os.getpid()} (debounce={DEBOUNCE_SECONDS}s)")
+
+    def format_message_metadata(msg):
+        """Extract rich metadata from a Discord message"""
+        # Channel type and location
+        if isinstance(msg.channel, discord.DMChannel):
+            location = "DM"
+        elif isinstance(msg.channel, discord.GroupChannel):
+            location = f"Group DM ({msg.channel.name or 'unnamed'})"
+        else:
+            server = msg.guild.name if msg.guild else "Unknown Server"
+            channel = msg.channel.name if hasattr(msg.channel, 'name') else "unknown"
+            location = f"#{channel} in {server}"
+
+        # Timestamp
+        ts = msg.created_at.strftime("%Y-%m-%d %H:%M UTC")
+
+        # Attachments
+        attachments = []
+        for att in msg.attachments:
+            if att.content_type and att.content_type.startswith("image/"):
+                attachments.append(f"[image: {att.filename}]")
+            elif att.content_type and att.content_type.startswith("video/"):
+                attachments.append(f"[video: {att.filename}]")
+            elif att.content_type and att.content_type.startswith("audio/"):
+                attachments.append(f"[audio: {att.filename}]")
+            else:
+                attachments.append(f"[file: {att.filename}]")
+
+        return {
+            "location": location,
+            "timestamp": ts,
+            "attachments": attachments,
+            "author": msg.author.display_name,
+        }
 
     @client.event
     async def on_message(msg):
@@ -172,10 +218,11 @@ def main(bot_name):
         c = c.strip() or "hi"
 
         channel_id = msg.channel.id
-        print(f"[{bot_name}] MSG {msg.id} (ch={channel_id}): {c[:50]}...")
+        metadata = format_message_metadata(msg)
+        print(f"[{bot_name}] MSG {msg.id} ({metadata['location']}): {c[:50]}...")
 
-        # Add to buffer
-        message_buffer[channel_id].append((msg.author.display_name, c, msg))
+        # Add to buffer with metadata
+        message_buffer[channel_id].append((metadata, c, msg))
 
         # Cancel existing timer if any
         if channel_id in buffer_timers:
