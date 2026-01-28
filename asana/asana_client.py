@@ -1191,7 +1191,7 @@ Environment:
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show GIDs in output")
 
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
 
     # workspaces
     ws = subparsers.add_parser("workspaces", help="List workspaces")
@@ -1302,7 +1302,15 @@ Environment:
     markdown.add_argument("--unwrap", action="store_true", help="Output without <body> wrapper")
     markdown.set_defaults(func=cmd_markdown, no_client=True)
 
+    # help
+    subparsers.add_parser("help", help="Show this help message")
+
     args = parser.parse_args()
+
+    # Show help if no command or 'help' command
+    if args.command is None or args.command == "help":
+        parser.print_help()
+        sys.exit(0)
 
     try:
         # Some commands don't need the Asana client
