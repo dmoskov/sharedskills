@@ -5,7 +5,7 @@ set -e
 REGION="us-west-2"
 PROJECT_NAME="discord-bots"
 REPO_URL="https://github.com/ScotterC/ai-dev-tools"  # Update this to your repo
-SERVICE_ROLE="arn:aws:iam::181691141781:role/codebuild-service-role"  # Update if different
+SERVICE_ROLE="arn:aws:iam::181691141781:role/crucible-remote-agent-codebuild-letta-deploy-role"
 
 # Check if project exists
 if aws codebuild batch-get-projects --names $PROJECT_NAME --region $REGION 2>/dev/null | grep -q "$PROJECT_NAME"; then
