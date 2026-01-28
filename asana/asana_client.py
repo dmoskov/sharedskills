@@ -42,6 +42,8 @@ except ImportError:
     print("Error: requests package required. Install with: pip install requests")
     sys.exit(1)
 
+from markdown_to_asana import markdown_to_asana_html
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -541,10 +543,26 @@ class AsanaClient:
         stories = self.get_stories(task_gid, limit)
         return [s for s in stories if s.get("resource_subtype") == "comment_added"]
 
-    def add_comment(self, task_gid: str, text: str) -> Dict[str, Any]:
-        """Add a comment to a task."""
+    def add_comment(
+        self, task_gid: str, text: str = None, html_text: str = None
+    ) -> Dict[str, Any]:
+        """Add a comment to a task.
+
+        Args:
+            task_gid: The task GID to comment on
+            text: Plain text comment
+            html_text: Rich text comment in Asana HTML format (takes precedence over text)
+        """
+        data = {}
+        if html_text:
+            data["html_text"] = html_text
+        elif text:
+            data["text"] = text
+        else:
+            raise ValueError("Either text or html_text must be provided")
+
         result = self._request(
-            "POST", f"tasks/{task_gid}/stories", json_data={"data": {"text": text}}
+            "POST", f"tasks/{task_gid}/stories", json_data={"data": data}
         )
         return result.get("data", {})
 
@@ -964,12 +982,20 @@ def cmd_my_tasks(client: AsanaClient, args):
 
 def cmd_create(client: AsanaClient, args):
     """Create task."""
+    notes = args.notes
+    html_notes = None
+
+    if args.markdown and notes:
+        html_notes = markdown_to_asana_html(notes)
+        notes = None
+
     task = client.create_task(
         name=args.name,
         project=args.project,
         assignee=args.assignee,
         due_on=args.due,
-        notes=args.notes,
+        notes=notes,
+        html_notes=html_notes,
     )
     if args.json:
         print(json.dumps(task, indent=2))
@@ -992,7 +1018,10 @@ def cmd_update(client: AsanaClient, args):
     if args.due:
         updates["due_on"] = args.due
     if args.notes:
-        updates["notes"] = args.notes
+        if args.markdown:
+            updates["html_notes"] = markdown_to_asana_html(args.notes)
+        else:
+            updates["notes"] = args.notes
 
     task = client.update_task(args.task_gid, **updates)
     if args.json:
@@ -1005,7 +1034,14 @@ def cmd_update(client: AsanaClient, args):
 
 def cmd_comment(client: AsanaClient, args):
     """Add comment."""
-    story = client.add_comment(args.task_gid, args.text)
+    text = args.text
+    html_text = None
+
+    if args.markdown:
+        html_text = markdown_to_asana_html(text)
+        text = None
+
+    story = client.add_comment(args.task_gid, text=text, html_text=html_text)
     if args.json:
         print(json.dumps(story, indent=2))
         return
@@ -1094,6 +1130,26 @@ def cmd_set_parent(client: AsanaClient, args):
         print(f"Task {args.task_gid} is now a standalone task (parent removed)")
 
 
+def cmd_markdown(client: AsanaClient, args):
+    """Preview markdown to Asana HTML conversion."""
+    # Get input from argument or stdin
+    if args.text:
+        text = args.text
+    elif not sys.stdin.isatty():
+        text = sys.stdin.read()
+    else:
+        print("Error: provide markdown text as argument or via stdin", file=sys.stderr)
+        sys.exit(1)
+
+    result = markdown_to_asana_html(text)
+
+    if args.unwrap:
+        # Remove <body> wrapper
+        result = result[6:-7]
+
+    print(result)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Asana CLI - Direct REST API client",
@@ -1147,6 +1203,8 @@ def main():
     create.add_argument("-a", "--assignee", help="Assignee (GID or 'me')")
     create.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
     create.add_argument("-n", "--notes", help="Description")
+    create.add_argument("-m", "--markdown", action="store_true",
+                        help="Convert notes from markdown to rich text")
     create.set_defaults(func=cmd_create)
 
     # update
@@ -1157,12 +1215,16 @@ def main():
     update.add_argument("-a", "--assignee", help="Assignee")
     update.add_argument("-d", "--due", help="Due date")
     update.add_argument("-n", "--notes", help="Description/notes")
+    update.add_argument("-m", "--markdown", action="store_true",
+                        help="Convert notes from markdown to rich text")
     update.set_defaults(func=cmd_update)
 
     # comment
     comment = subparsers.add_parser("comment", help="Add comment")
     comment.add_argument("task_gid", help="Task GID")
     comment.add_argument("text", help="Comment text")
+    comment.add_argument("-m", "--markdown", action="store_true",
+                         help="Interpret text as markdown and convert to rich text")
     comment.set_defaults(func=cmd_comment)
 
     # subtasks
@@ -1197,11 +1259,21 @@ def main():
     setparent.add_argument("--after", help="Insert after this sibling subtask GID")
     setparent.set_defaults(func=cmd_set_parent)
 
+    # markdown (preview converter - no client needed)
+    markdown = subparsers.add_parser("markdown", help="Preview markdown to Asana HTML conversion")
+    markdown.add_argument("text", nargs="?", help="Markdown text (or pipe via stdin)")
+    markdown.add_argument("--unwrap", action="store_true", help="Output without <body> wrapper")
+    markdown.set_defaults(func=cmd_markdown, no_client=True)
+
     args = parser.parse_args()
 
     try:
-        client = AsanaClient()
-        args.func(client, args)
+        # Some commands don't need the Asana client
+        if getattr(args, "no_client", False):
+            args.func(None, args)
+        else:
+            client = AsanaClient()
+            args.func(client, args)
     except AsanaError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
