@@ -7,7 +7,12 @@ import fcntl
 import json
 import asyncio
 import re
+import hashlib
+import mimetypes
+from pathlib import Path
 from collections import defaultdict
+from typing import List, Dict, Optional
+from io import BytesIO
 
 DEBOUNCE_SECONDS = 10  # Wait this long for more messages before responding
 
@@ -15,6 +20,11 @@ DEBOUNCE_SECONDS = 10  # Wait this long for more messages before responding
 CHUNK_MAX_PARAGRAPHS = 3  # Maximum paragraphs per chunk
 CHUNK_MAX_CHARS = 1900  # Maximum characters per chunk (Discord limit is 2000)
 CHUNK_DELAY_SECONDS = 1.5  # Delay between chunks for natural reading pace
+
+# Attachment configuration
+MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10MB limit for processing
+SUPPORTED_IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+ATTACHMENT_STORAGE_DIR = os.path.expanduser("~/.discordbot/attachments")
 
 
 def split_into_paragraphs(text):
@@ -112,6 +122,155 @@ def chunk_message(text, max_paragraphs=CHUNK_MAX_PARAGRAPHS, max_chars=CHUNK_MAX
     return chunks
 
 
+def get_file_hash(data: bytes) -> str:
+    """Generate SHA256 hash of file data for deduplication."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def is_image(filename: str) -> bool:
+    """Check if a file is an image based on extension."""
+    ext = Path(filename).suffix.lower()
+    return ext in SUPPORTED_IMAGE_TYPES
+
+
+async def download_attachment(attachment: discord.Attachment) -> Optional[Dict]:
+    """
+    Download and process a Discord attachment.
+
+    Args:
+        attachment: Discord attachment object
+
+    Returns:
+        Dict with attachment metadata, or None if processing failed
+    """
+    if attachment.size > MAX_ATTACHMENT_SIZE:
+        print(f"Attachment {attachment.filename} too large ({attachment.size} bytes)")
+        return {
+            "filename": attachment.filename,
+            "size": attachment.size,
+            "content_type": attachment.content_type,
+            "url": attachment.url,
+            "error": "File too large to process",
+        }
+
+    try:
+        # Download the file
+        data = await attachment.read()
+        file_hash = get_file_hash(data)
+
+        # Determine content type
+        content_type = (
+            attachment.content_type or mimetypes.guess_type(attachment.filename)[0]
+        )
+
+        metadata = {
+            "filename": attachment.filename,
+            "size": attachment.size,
+            "content_type": content_type,
+            "url": attachment.url,
+            "hash": file_hash,
+        }
+
+        # For images, extract additional metadata
+        if is_image(attachment.filename):
+            try:
+                from PIL import Image
+
+                img = Image.open(BytesIO(data))
+                metadata["image"] = {
+                    "width": img.width,
+                    "height": img.height,
+                    "format": img.format,
+                    "mode": img.mode,
+                }
+            except ImportError:
+                # PIL not available, just include basic info
+                metadata["image"] = {"format": "unknown"}
+            except Exception as e:
+                print(f"Error processing image {attachment.filename}: {e}")
+                metadata["image"] = {"error": str(e)}
+
+        # Optionally save file to storage
+        storage_path = Path(ATTACHMENT_STORAGE_DIR) / file_hash[:2] / file_hash
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not storage_path.exists():
+            storage_path.write_bytes(data)
+            metadata["stored_path"] = str(storage_path)
+
+        return metadata
+
+    except Exception as e:
+        print(f"Error downloading attachment {attachment.filename}: {e}")
+        return {
+            "filename": attachment.filename,
+            "url": attachment.url,
+            "error": str(e),
+        }
+
+
+async def process_attachments(
+    attachments: List[discord.Attachment], bot_config: Dict
+) -> List[Dict]:
+    """
+    Process all attachments from a message.
+
+    Args:
+        attachments: List of Discord attachments
+        bot_config: Bot configuration dict
+
+    Returns:
+        List of processed attachment metadata
+    """
+    # Check if attachments are enabled for this bot
+    if not bot_config.get("enable_attachments", True):
+        return []
+
+    if not attachments:
+        return []
+
+    print(f"Processing {len(attachments)} attachment(s)...")
+    results = []
+
+    for attachment in attachments:
+        metadata = await download_attachment(attachment)
+        if metadata:
+            results.append(metadata)
+
+    return results
+
+
+def format_attachments_for_message(attachments: List[Dict]) -> str:
+    """
+    Format attachment metadata for inclusion in Letta message.
+
+    Args:
+        attachments: List of attachment metadata dicts
+
+    Returns:
+        Formatted string describing the attachments
+    """
+    if not attachments:
+        return ""
+
+    lines = ["\n[Attachments:]"]
+    for i, att in enumerate(attachments, 1):
+        if "error" in att:
+            lines.append(f"  {i}. {att['filename']} - Error: {att['error']}")
+        else:
+            size_kb = att["size"] / 1024
+            line = f"  {i}. {att['filename']} ({size_kb:.1f} KB, {att.get('content_type', 'unknown')})"
+
+            # Add image dimensions if available
+            if "image" in att and "width" in att["image"]:
+                img = att["image"]
+                line += f" - {img['width']}x{img['height']} {img.get('format', '')}"
+
+            lines.append(line)
+
+    return "\n".join(lines)
+
+
 def load_config():
     """Load config from AWS Secrets Manager or local bots.json"""
     secret_name = os.environ.get("AWS_SECRET_NAME")
@@ -199,7 +358,7 @@ def main(bot_name):
     intents.message_content = True
     client = discord.Client(intents=intents)
 
-    # Message buffer for debouncing: {channel_id: [(author, content, msg_obj), ...]}
+    # Message buffer for debouncing: {channel_id: [(author, content, attachments, msg_obj), ...]}
     message_buffer = defaultdict(list)
     buffer_timers = {}
 
@@ -274,18 +433,28 @@ def main(bot_name):
             return
 
         # Combine messages from same channel
+        all_attachments = []
         if len(messages) == 1:
-            author, content, msg_obj = messages[0]
+            author, content, attachments, msg_obj = messages[0]
             combined = f"[Discord message from {author}]: {content}"
+            all_attachments = attachments
         else:
             # Multiple messages - format as a batch
-            lines = [f"[{author}]: {content}" for author, content, _ in messages]
+            lines = []
+            for author, content, attachments, _ in messages:
+                lines.append(f"[{author}]: {content}")
+                all_attachments.extend(attachments)
             combined = (
                 f"[Discord messages - {len(messages)} messages in quick succession]:\n"
                 + "\n".join(lines)
             )
 
-        last_msg = messages[-1][2]  # Reply to the last message
+        # Add attachment information to the message
+        if all_attachments:
+            attachment_info = format_attachments_for_message(all_attachments)
+            combined += attachment_info
+
+        last_msg = messages[-1][3]  # Reply to the last message (now index 3)
         print(
             f"[{bot_name}] Flushing {len(messages)} message(s) from channel {channel_id}"
         )
@@ -319,8 +488,16 @@ def main(bot_name):
         channel_id = msg.channel.id
         print(f"[{bot_name}] MSG {msg.id} (ch={channel_id}): {c[:50]}...")
 
+        # Process attachments if present
+        attachments = []
+        if msg.attachments:
+            print(f"[{bot_name}] Message has {len(msg.attachments)} attachment(s)")
+            attachments = await process_attachments(msg.attachments, bot_config)
+
         # Add to buffer
-        message_buffer[channel_id].append((msg.author.display_name, c, msg))
+        message_buffer[channel_id].append(
+            (msg.author.display_name, c, attachments, msg)
+        )
 
         # Cancel existing timer if any
         if channel_id in buffer_timers:
