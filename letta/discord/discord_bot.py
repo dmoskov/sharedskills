@@ -9,9 +9,10 @@ import asyncio
 import re
 import hashlib
 import mimetypes
+import base64
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from io import BytesIO
 
 DEBOUNCE_SECONDS = 10  # Wait this long for more messages before responding
@@ -171,8 +172,12 @@ async def download_attachment(attachment: discord.Attachment) -> Optional[Dict]:
             "hash": file_hash,
         }
 
-        # For images, extract additional metadata
+        # For images, include base64 data for sending to Letta
         if is_image(attachment.filename):
+            # Store base64-encoded image data for multimodal API
+            metadata["base64_data"] = base64.standard_b64encode(data).decode("utf-8")
+            metadata["is_image"] = True
+
             try:
                 from PIL import Image
 
@@ -271,6 +276,119 @@ def format_attachments_for_message(attachments: List[Dict]) -> str:
     return "\n".join(lines)
 
 
+async def extract_image_urls(text: str) -> List[str]:
+    """
+    Extract image URLs from text.
+
+    Looks for:
+    - Markdown image syntax: ![alt](url)
+    - Plain URLs ending in image extensions
+    - URLs with image MIME types
+
+    Returns list of URLs found.
+    """
+    urls = []
+
+    # Extract markdown image syntax: ![alt](url)
+    markdown_pattern = r"!\[([^\]]*)\]\(([^\)]+)\)"
+    for match in re.finditer(markdown_pattern, text):
+        url = match.group(2)
+        urls.append(url)
+
+    # Extract plain URLs that look like images
+    url_pattern = r"https?://[^\s<>\"]+\.(?:jpg|jpeg|png|gif|webp|bmp)"
+    for match in re.finditer(url_pattern, text, re.IGNORECASE):
+        url = match.group(0)
+        if url not in urls:
+            urls.append(url)
+
+    return urls
+
+
+async def download_image_from_url(
+    url: str, session: aiohttp.ClientSession
+) -> Optional[Dict]:
+    """
+    Download an image from a URL.
+
+    Returns dict with:
+    - data: bytes of the image
+    - filename: suggested filename
+    - content_type: MIME type
+    Or None if download fails.
+    """
+    try:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=30)
+        ) as response:
+            if response.status != 200:
+                print(f"Failed to download image from {url}: HTTP {response.status}")
+                return None
+
+            content_type = response.headers.get("content-type", "")
+
+            # Check if it's an image
+            if not content_type.startswith("image/"):
+                print(f"URL {url} is not an image (content-type: {content_type})")
+                return None
+
+            # Download the data
+            data = await response.read()
+
+            # Check size (use same limit as attachments)
+            if len(data) > MAX_ATTACHMENT_SIZE:
+                print(f"Image from {url} too large: {len(data)} bytes")
+                return None
+
+            # Extract filename from URL or generate one
+            filename = url.split("/")[-1].split("?")[0]  # Remove query params
+            if not filename or "." not in filename:
+                # Generate filename from content type
+                ext = mimetypes.guess_extension(content_type) or ".png"
+                filename = f"image{ext}"
+
+            return {
+                "data": data,
+                "filename": filename,
+                "content_type": content_type,
+            }
+
+    except Exception as e:
+        print(f"Error downloading image from {url}: {type(e).__name__}: {e}")
+        return None
+
+
+async def extract_and_download_images(text: str) -> List[Dict]:
+    """
+    Extract image URLs from text and download them.
+
+    Returns list of dicts with:
+    - data: image bytes
+    - filename: suggested filename
+    - content_type: MIME type
+    """
+    urls = await extract_image_urls(text)
+
+    if not urls:
+        return []
+
+    print(f"Found {len(urls)} image URL(s) in message")
+
+    images = []
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for url in urls:
+            print(f"Downloading image from: {url}")
+            image_data = await download_image_from_url(url, session)
+            if image_data:
+                images.append(image_data)
+                print(f"Successfully downloaded: {image_data['filename']}")
+            else:
+                print(f"Failed to download: {url}")
+
+    return images
+
+
 def load_config():
     """Load config from AWS Secrets Manager or local bots.json"""
     secret_name = os.environ.get("AWS_SECRET_NAME")
@@ -362,19 +480,42 @@ def main(bot_name):
     message_buffer = defaultdict(list)
     buffer_timers = {}
 
-    async def send_chunked_reply(text, reply_to_msg):
-        """Send a potentially long message as multiple chunks with delays."""
+    async def send_chunked_reply(text, reply_to_msg, images=None):
+        """Send a potentially long message as multiple chunks with delays.
+
+        Args:
+            text: Message text to send
+            reply_to_msg: Discord message to reply to
+            images: Optional list of image dicts with 'data', 'filename', 'content_type'
+        """
+        # Extract and download any images from URLs in the text
+        if images is None:
+            images = await extract_and_download_images(text)
+
         chunks = chunk_message(text)
 
         if not chunks:
             return
 
         print(f"[{bot_name}] Sending {len(chunks)} chunk(s) (total: {len(text)} chars)")
+        if images:
+            print(f"[{bot_name}] Sending {len(images)} image(s)")
 
-        # Send first chunk as a reply
+        # Send first chunk as a reply, with images if present
         first_chunk = chunks[0]
         print(f"[{bot_name}] Chunk 1/{len(chunks)}: {first_chunk[:60]}...")
-        sent_msg = await reply_to_msg.reply(first_chunk)
+
+        # Prepare files for Discord
+        files = []
+        if images:
+            for img in images:
+                file_obj = BytesIO(img["data"])
+                files.append(discord.File(file_obj, filename=img["filename"]))
+
+        if files:
+            sent_msg = await reply_to_msg.reply(content=first_chunk, files=files)
+        else:
+            sent_msg = await reply_to_msg.reply(first_chunk)
 
         # Send remaining chunks as follow-ups with delays
         for i, chunk in enumerate(chunks[1:], start=2):
@@ -382,15 +523,39 @@ def main(bot_name):
             print(f"[{bot_name}] Chunk {i}/{len(chunks)}: {chunk[:60]}...")
             await sent_msg.channel.send(chunk)
 
-    async def call_letta_and_reply(combined_content, reply_to_msg):
-        """Send message to Letta and reply with response"""
-        print(f"[{bot_name}] Calling Letta with {len(combined_content)} chars...")
+    async def call_letta_and_reply(combined_content, reply_to_msg, images=None):
+        """Send message to Letta and reply with response.
+
+        Args:
+            combined_content: Text content of the message
+            reply_to_msg: Discord message to reply to
+            images: Optional list of image dicts with 'base64_data' and 'content_type'
+        """
+        # Build multimodal content if images are present
+        if images:
+            # Letta multimodal format: content is an array of content blocks
+            content = [{"type": "text", "text": combined_content}]
+            for img in images:
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": img.get("content_type", "image/jpeg"),
+                        "data": img["base64_data"],
+                        "detail": "auto"
+                    }
+                })
+            print(f"[{bot_name}] Calling Letta with {len(combined_content)} chars + {len(images)} image(s)...")
+        else:
+            content = combined_content
+            print(f"[{bot_name}] Calling Letta with {len(combined_content)} chars...")
+
         try:
             timeout = aiohttp.ClientTimeout(total=300, connect=60, sock_read=300)
             async with aiohttp.ClientSession(timeout=timeout) as s:
                 async with s.post(
                     f"{LETTA}/v1/agents/{AGENT}/messages",
-                    json={"messages": [{"role": "user", "content": combined_content}]},
+                    json={"messages": [{"role": "user", "content": content}]},
                 ) as r:
                     print(f"[{bot_name}] Status: {r.status}")
                     data = await r.json()
@@ -449,17 +614,23 @@ def main(bot_name):
                 + "\n".join(lines)
             )
 
-        # Add attachment information to the message
-        if all_attachments:
-            attachment_info = format_attachments_for_message(all_attachments)
+        # Extract images for multimodal API and add text info for non-images
+        image_attachments = [att for att in all_attachments if att.get("is_image") and att.get("base64_data")]
+        non_image_attachments = [att for att in all_attachments if not att.get("is_image")]
+
+        # Add text description for non-image attachments only
+        if non_image_attachments:
+            attachment_info = format_attachments_for_message(non_image_attachments)
             combined += attachment_info
 
         last_msg = messages[-1][3]  # Reply to the last message (now index 3)
         print(
             f"[{bot_name}] Flushing {len(messages)} message(s) from channel {channel_id}"
         )
+        if image_attachments:
+            print(f"[{bot_name}] Including {len(image_attachments)} image(s) for vision processing")
 
-        await call_letta_and_reply(combined, last_msg)
+        await call_letta_and_reply(combined, last_msg, images=image_attachments if image_attachments else None)
 
     async def debounce_then_flush(channel_id):
         """Wait for debounce period then flush the buffer"""
