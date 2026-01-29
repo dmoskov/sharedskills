@@ -23,7 +23,7 @@ CHUNK_MAX_CHARS = 1900  # Maximum characters per chunk (Discord limit is 2000)
 CHUNK_DELAY_SECONDS = 1.5  # Delay between chunks for natural reading pace
 
 # Attachment configuration
-MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25MB limit for processing
+MAX_ATTACHMENT_SIZE = 100 * 1024 * 1024  # 100MB - match Discord's max (boosted servers)
 SUPPORTED_IMAGE_TYPES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
 ATTACHMENT_STORAGE_DIR = os.path.expanduser("~/.discordbot/attachments")
 
