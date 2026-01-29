@@ -17,6 +17,12 @@ from io import BytesIO
 
 DEBOUNCE_SECONDS = 10  # Wait this long for more messages before responding
 
+# Letta API configuration
+LETTA_TIMEOUT_SECONDS = 60  # Timeout for single Letta API request
+LETTA_MAX_RETRIES = 3  # Maximum number of retries for failed requests
+LETTA_RETRY_BACKOFF = 2  # Exponential backoff multiplier
+LETTA_RETRY_INITIAL_DELAY = 1  # Initial retry delay in seconds
+
 # Chunking configuration
 CHUNK_MAX_PARAGRAPHS = 3  # Maximum paragraphs per chunk
 CHUNK_MAX_CHARS = 1900  # Maximum characters per chunk (Discord limit is 2000)
@@ -390,22 +396,9 @@ async def extract_and_download_images(text: str) -> List[Dict]:
 
 
 def load_config():
-    """Load config from AWS Secrets Manager or local bots.json"""
-    secret_name = os.environ.get("AWS_SECRET_NAME")
-
-    if secret_name:
-        import boto3
-
-        client = boto3.client(
-            "secretsmanager", region_name=os.environ.get("AWS_REGION", "us-east-1")
-        )
-        response = client.get_secret_value(SecretId=secret_name)
-        return json.loads(response["SecretString"])
-
-    # Fall back to local config file
-    config_path = os.environ.get("CONFIG_FILE", "bots.json")
-    with open(config_path) as f:
-        return json.load(f)
+    """Load and validate config from AWS Secrets Manager or local bots.json"""
+    from config_loader import load_config as _load_config
+    return _load_config()
 
 
 def main(bot_name):
@@ -550,41 +543,79 @@ def main(bot_name):
             content = combined_content
             print(f"[{bot_name}] Calling Letta with {len(combined_content)} chars...")
 
-        try:
-            timeout = aiohttp.ClientTimeout(total=300, connect=60, sock_read=300)
-            async with aiohttp.ClientSession(timeout=timeout) as s:
-                async with s.post(
-                    f"{LETTA}/v1/agents/{AGENT}/messages",
-                    json={"messages": [{"role": "user", "content": content}]},
-                ) as r:
-                    print(f"[{bot_name}] Status: {r.status}")
-                    data = await r.json()
-                    for m in (
-                        data.get("messages", []) if isinstance(data, dict) else data
-                    ):
-                        # Handle direct assistant_message responses
-                        if m.get("message_type") == "assistant_message":
-                            text = m.get("content", "")
-                            print(f"[{bot_name}] Reply (assistant): {text[:60]}...")
-                            await send_chunked_reply(text, reply_to_msg)
+        # Retry loop with exponential backoff
+        last_error = None
+        for attempt in range(LETTA_MAX_RETRIES):
+            if attempt > 0:
+                delay = LETTA_RETRY_INITIAL_DELAY * (LETTA_RETRY_BACKOFF ** (attempt - 1))
+                print(f"[{bot_name}] Retry {attempt}/{LETTA_MAX_RETRIES-1} after {delay}s delay...")
+                await asyncio.sleep(delay)
+
+            try:
+                timeout = aiohttp.ClientTimeout(
+                    total=LETTA_TIMEOUT_SECONDS,
+                    connect=30,
+                    sock_read=LETTA_TIMEOUT_SECONDS
+                )
+                async with aiohttp.ClientSession(timeout=timeout) as s:
+                    async with s.post(
+                        f"{LETTA}/v1/agents/{AGENT}/messages",
+                        json={"messages": [{"role": "user", "content": content}]},
+                    ) as r:
+                        print(f"[{bot_name}] Status: {r.status}")
+
+                        # Retry on 5xx server errors
+                        if r.status >= 500:
+                            last_error = f"Server error: {r.status}"
+                            print(f"[{bot_name}] {last_error}, will retry...")
+                            continue
+
+                        # Don't retry on client errors (4xx)
+                        if r.status >= 400:
+                            print(f"[{bot_name}] Client error: {r.status}, not retrying")
                             return
-                        # Handle send_message tool calls (some agents use this)
-                        if m.get("message_type") == "tool_call_message":
-                            tool_call = m.get("tool_call", {})
-                            if tool_call.get("name") == "send_message":
-                                try:
-                                    args = json.loads(tool_call.get("arguments", "{}"))
-                                    text = args.get("message", "")
-                                    if text:
-                                        print(
-                                            f"[{bot_name}] Reply (tool): {text[:60]}..."
-                                        )
-                                        await send_chunked_reply(text, reply_to_msg)
-                                        return
-                                except json.JSONDecodeError:
-                                    pass
-        except Exception as e:
-            print(f"[{bot_name}] Error: {type(e).__name__}: {e}")
+
+                        data = await r.json()
+                        for m in (
+                            data.get("messages", []) if isinstance(data, dict) else data
+                        ):
+                            # Handle direct assistant_message responses
+                            if m.get("message_type") == "assistant_message":
+                                text = m.get("content", "")
+                                print(f"[{bot_name}] Reply (assistant): {text[:60]}...")
+                                await send_chunked_reply(text, reply_to_msg)
+                                return
+                            # Handle send_message tool calls (some agents use this)
+                            if m.get("message_type") == "tool_call_message":
+                                tool_call = m.get("tool_call", {})
+                                if tool_call.get("name") == "send_message":
+                                    try:
+                                        args = json.loads(tool_call.get("arguments", "{}"))
+                                        text = args.get("message", "")
+                                        if text:
+                                            print(
+                                                f"[{bot_name}] Reply (tool): {text[:60]}..."
+                                            )
+                                            await send_chunked_reply(text, reply_to_msg)
+                                            return
+                                    except json.JSONDecodeError:
+                                        pass
+                        # Success - no retry needed
+                        return
+
+            except asyncio.TimeoutError:
+                last_error = f"Request timed out after {LETTA_TIMEOUT_SECONDS}s"
+                print(f"[{bot_name}] {last_error}, will retry...")
+            except aiohttp.ClientError as e:
+                last_error = f"Network error: {type(e).__name__}: {e}"
+                print(f"[{bot_name}] {last_error}, will retry...")
+            except Exception as e:
+                # Unexpected error - log but don't retry
+                print(f"[{bot_name}] Unexpected error: {type(e).__name__}: {e}")
+                return
+
+        # All retries exhausted
+        print(f"[{bot_name}] All {LETTA_MAX_RETRIES} attempts failed. Last error: {last_error}")
 
     async def flush_buffer(channel_id):
         """Send buffered messages to Letta after debounce period"""
