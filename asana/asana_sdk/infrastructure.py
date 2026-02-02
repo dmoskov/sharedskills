@@ -260,6 +260,9 @@ def with_api_error_handling(operation_fmt: str) -> Callable:
                 result = func(*args, **kwargs)
                 record_rate_limit_result(success=True)
                 return result
+            except (ValueError, TypeError):
+                # Re-raise validation errors without wrapping
+                raise
             except ApiException as e:
                 record_rate_limit_result(success=False, error=e)
                 handle_api_exception(e, operation)
