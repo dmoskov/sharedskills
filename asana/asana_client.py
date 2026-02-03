@@ -950,8 +950,14 @@ def cmd_tasks(client: AsanaClient, args):
 
 def cmd_search(client: AsanaClient, args):
     """Search tasks."""
+    # Support both positional query and -t/--text flag
+    text = args.text or args.query
+
     tasks = client.search_tasks(
-        text=args.query,
+        text=text,
+        workspace=args.workspace,
+        assignee=args.assignee,
+        projects=args.projects,
         completed=False if args.incomplete else None,
         limit=args.limit,
     )
@@ -1185,7 +1191,11 @@ def main():
 
     # search
     search = subparsers.add_parser("search", help="Search tasks")
-    search.add_argument("query", help="Search text")
+    search.add_argument("query", nargs="?", help="Search text (or use -t)")
+    search.add_argument("-t", "--text", help="Search text")
+    search.add_argument("-a", "--assignee", help="Assignee filter (GID or 'me')")
+    search.add_argument("-p", "--projects", help="Project GIDs (comma-separated)")
+    search.add_argument("-w", "--workspace", help="Workspace GID")
     search.add_argument("-i", "--incomplete", action="store_true")
     search.add_argument("-l", "--limit", type=int, default=50)
     search.set_defaults(func=cmd_search)
