@@ -34,11 +34,7 @@ import json
 import logging
 import os
 import sys
-import warnings
 from typing import Any, Dict, List, Optional
-
-# Suppress urllib3 LibreSSL warning on macOS
-warnings.filterwarnings("ignore", message=".*LibreSSL.*")
 
 try:
     import requests
