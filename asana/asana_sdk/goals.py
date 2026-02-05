@@ -18,11 +18,14 @@ from .errors import AsanaClientError
 
 logger = logging.getLogger(__name__)
 
-# Valid status values for goals
-VALID_GOAL_STATUSES = ["on_track", "at_risk", "off_track", "on_hold"]
+# Valid status values for goals (Asana API values)
+VALID_GOAL_STATUSES = ["achieved", "dropped", "green", "missed", "partial", "red", "yellow"]
 
 # Valid metric types
 VALID_METRIC_TYPES = ["number", "percentage", "currency"]
+
+# Valid metric unit types (Asana API values)
+VALID_METRIC_UNITS = ["currency", "none", "percentage"]
 
 
 @with_api_error_handling("fetching goals for workspace {workspace_gid}")
@@ -450,6 +453,11 @@ def create_goal_metric(
     if metric_type not in VALID_METRIC_TYPES:
         raise ValueError(
             f"Invalid metric_type: {metric_type}. Must be one of: {VALID_METRIC_TYPES}"
+        )
+
+    if unit and unit not in VALID_METRIC_UNITS:
+        raise ValueError(
+            f"Invalid unit: {unit}. Must be one of: {VALID_METRIC_UNITS}"
         )
 
     if not ASANA_SDK_AVAILABLE:

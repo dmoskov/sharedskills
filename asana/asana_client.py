@@ -1182,6 +1182,7 @@ def cmd_goals(client: AsanaClient, args):
     goals = get_goals(
         workspace_gid=workspace_gid,
         team_gid=args.team,
+        time_period_gid=getattr(args, 'time_period', None),
         limit=args.limit,
     )
 
@@ -1429,6 +1430,7 @@ def main():
     # goals (uses asana_sdk, not the REST client)
     goals = subparsers.add_parser("goals", help="List goals in workspace")
     goals.add_argument("-t", "--team", help="Filter by team GID")
+    goals.add_argument("-p", "--time-period", dest="time_period", help="Filter by time period GID (e.g., Q1 FY26)")
     goals.add_argument("-l", "--limit", type=int, default=50)
     goals.set_defaults(func=cmd_goals, no_client=True)
 
@@ -1443,8 +1445,8 @@ def main():
     create_goal.add_argument("-o", "--owner", help="Owner user GID")
     create_goal.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
     create_goal.add_argument("-s", "--start", help="Start date (YYYY-MM-DD)")
-    create_goal.add_argument("--status", choices=["on_track", "at_risk", "off_track", "on_hold"],
-                             help="Goal status")
+    create_goal.add_argument("--status", choices=["green", "yellow", "red", "achieved", "partial", "missed", "dropped"],
+                             help="Goal status (requires metric to be set first)")
     create_goal.add_argument("-n", "--notes", help="Description")
     create_goal.set_defaults(func=cmd_create_goal, no_client=True)
 
@@ -1455,8 +1457,8 @@ def main():
     update_goal.add_argument("-o", "--owner", help="Owner user GID")
     update_goal.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
     update_goal.add_argument("-s", "--start", help="Start date (YYYY-MM-DD)")
-    update_goal.add_argument("--status", choices=["on_track", "at_risk", "off_track", "on_hold"],
-                             help="Goal status")
+    update_goal.add_argument("--status", choices=["green", "yellow", "red", "achieved", "partial", "missed", "dropped"],
+                             help="Goal status (requires metric to be set first)")
     update_goal.add_argument("-n", "--notes", help="Description")
     update_goal.set_defaults(func=cmd_update_goal, no_client=True)
 

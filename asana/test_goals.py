@@ -99,7 +99,7 @@ class TestGetGoal(unittest.TestCase):
             "gid": "goal123",
             "name": "Increase Revenue",
             "owner": {"gid": "user1", "name": "John"},
-            "status": "on_track",
+            "status": "green",
         }
 
         mock_goals_api = MagicMock()
@@ -111,7 +111,7 @@ class TestGetGoal(unittest.TestCase):
             result = get_goal("goal123")
 
         self.assertEqual(result["gid"], "goal123")
-        self.assertEqual(result["status"], "on_track")
+        self.assertEqual(result["status"], "green")
 
     def test_get_goal_validates_gid(self):
         """Test get_goal validates goal_gid."""
@@ -176,7 +176,7 @@ class TestCreateGoal(unittest.TestCase):
                 owner_gid="user456",
                 due_on="2026-03-31",
                 start_on="2026-01-01",
-                status="on_track",
+                status="green",
                 notes="Target $100k MRR by end of Q1",
                 time_period_gid="tp789",
             )
@@ -189,7 +189,7 @@ class TestCreateGoal(unittest.TestCase):
         self.assertEqual(data["owner"], "user456")
         self.assertEqual(data["due_on"], "2026-03-31")
         self.assertEqual(data["start_on"], "2026-01-01")
-        self.assertEqual(data["status"], "on_track")
+        self.assertEqual(data["status"], "green")
         self.assertIn("$100k", data["notes"])
 
     def test_create_goal_validates_name(self):
@@ -238,7 +238,7 @@ class TestUpdateGoal(unittest.TestCase):
             result = update_goal(
                 goal_gid="goal123",
                 name="Updated Goal Name",
-                status="at_risk"
+                status="yellow"
             )
 
         self.assertTrue(result)
@@ -247,7 +247,7 @@ class TestUpdateGoal(unittest.TestCase):
         # Verify body
         call_body = mock_goals_api.update_goal.call_args[0][0]
         self.assertEqual(call_body["data"]["name"], "Updated Goal Name")
-        self.assertEqual(call_body["data"]["status"], "at_risk")
+        self.assertEqual(call_body["data"]["status"], "yellow")
 
     @patch("asana_sdk.goals.get_client")
     @patch("asana_sdk.goals.ASANA_SDK_AVAILABLE", True)
@@ -363,17 +363,19 @@ class TestCreateGoalMetric(unittest.TestCase):
 
             result = create_goal_metric(
                 goal_gid="goal123",
-                metric_type="number",
+                metric_type="currency",
                 target_number_value=100000,
-                unit="USD"
+                unit="currency",
+                currency_code="USD"
             )
 
         self.assertEqual(result["target_number_value"], 100000)
 
         # Verify body
         call_body = mock_goals_api.create_goal_metric.call_args[0][0]
-        self.assertEqual(call_body["data"]["resource_subtype"], "number")
+        self.assertEqual(call_body["data"]["resource_subtype"], "currency")
         self.assertEqual(call_body["data"]["target_number_value"], 100000)
+        self.assertEqual(call_body["data"]["currency_code"], "USD")
 
     def test_create_goal_metric_validates_type(self):
         """Test create_goal_metric validates metric_type."""
