@@ -1157,14 +1157,37 @@ def cmd_markdown(client: AsanaClient, args):
 
 
 def main():
+    epilog = """\
+Examples:
+  asana workspaces              List workspaces
+  asana projects                List projects in workspace
+  asana sections <project>      List sections in project
+  asana tasks -p <project>      List tasks in project
+  asana tasks -s <section> -i   Incomplete tasks in section
+  asana task <gid>              Get task details
+  asana search "query"          Search tasks
+  asana my-tasks -i             My incomplete tasks
+  asana create "Name" -p <gid>  Create task in project
+  asana update <gid> -c true    Mark task complete
+  asana comment <gid> "text"    Add comment to task
+  asana move <gid> -s <section> Move task to section
+  asana set-parent <gid> -p <parent>  Make task a subtask
+
+Environment:
+  ASANA_ACCESS_TOKEN   Required. Personal access token.
+  ASANA_WORKSPACE      Optional. Default workspace GID.
+"""
+
     parser = argparse.ArgumentParser(
+        prog="asana",
         description="Asana CLI - Direct REST API client",
+        epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--json", action="store_true", help="Output JSON")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show GIDs")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show GIDs in output")
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
 
     # workspaces
     ws = subparsers.add_parser("workspaces", help="List workspaces")
@@ -1275,7 +1298,15 @@ def main():
     markdown.add_argument("--unwrap", action="store_true", help="Output without <body> wrapper")
     markdown.set_defaults(func=cmd_markdown, no_client=True)
 
+    # help
+    subparsers.add_parser("help", help="Show this help message")
+
     args = parser.parse_args()
+
+    # Show help if no command or 'help' command
+    if args.command is None or args.command == "help":
+        parser.print_help()
+        sys.exit(0)
 
     try:
         # Some commands don't need the Asana client
