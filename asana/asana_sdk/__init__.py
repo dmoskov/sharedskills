@@ -129,6 +129,20 @@ from .attachments import (
     delete_attachment,
 )
 
+# Goal operations
+from .goals import (
+    get_goals,
+    get_goal,
+    create_goal,
+    update_goal,
+    delete_goal,
+    update_goal_metric,
+    create_goal_metric,
+    add_goal_followers,
+    remove_goal_followers,
+    get_parent_goals,
+)
+
 __all__ = [
     # Errors
     "AsanaClientError",
@@ -189,6 +203,17 @@ __all__ = [
     "get_attachment",
     "download_attachment",
     "delete_attachment",
+    # Goals
+    "get_goals",
+    "get_goal",
+    "create_goal",
+    "update_goal",
+    "delete_goal",
+    "update_goal_metric",
+    "create_goal_metric",
+    "add_goal_followers",
+    "remove_goal_followers",
+    "get_parent_goals",
 ]
 
 __version__ = "1.0.0"
