@@ -1,0 +1,16 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment/secrets
+.env
+
+# IDE/tools
+.claude/
+.letta/
+.memory/
