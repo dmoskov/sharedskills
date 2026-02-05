@@ -284,6 +284,15 @@ class AsanaClient:
         result = self._request("GET", f"projects/{project_gid}/sections", {"opt_fields": "name"})
         return result.get("data", [])
 
+    def get_custom_field_settings(self, project_gid: str) -> List[Dict[str, Any]]:
+        """Get custom field settings for a project, including enum options."""
+        result = self._request(
+            "GET",
+            f"projects/{project_gid}/custom_field_settings",
+            {"opt_fields": "custom_field.name,custom_field.type,custom_field.enum_options,custom_field.enum_options.name,custom_field.enum_options.enabled"},
+        )
+        return [item.get("custom_field", {}) for item in result.get("data", [])]
+
     # ========== Task Operations ==========
 
     def get_task(self, task_gid: str) -> Dict[str, Any]:
@@ -995,6 +1004,10 @@ def cmd_create(client: AsanaClient, args):
         html_notes = markdown_to_asana_html(notes)
         notes = None
 
+    custom_fields = None
+    if args.custom_fields:
+        custom_fields = json.loads(args.custom_fields)
+
     task = client.create_task(
         name=args.name,
         project=args.project,
@@ -1002,6 +1015,7 @@ def cmd_create(client: AsanaClient, args):
         due_on=args.due,
         notes=notes,
         html_notes=html_notes,
+        custom_fields=custom_fields,
     )
     if args.json:
         print(json.dumps(task, indent=2))
@@ -1028,6 +1042,8 @@ def cmd_update(client: AsanaClient, args):
             updates["html_notes"] = markdown_to_asana_html(args.notes)
         else:
             updates["notes"] = args.notes
+    if args.custom_fields:
+        updates["custom_fields"] = json.loads(args.custom_fields)
 
     task = client.update_task(args.task_gid, **updates)
     if args.json:
@@ -1081,6 +1097,24 @@ def cmd_sections(client: AsanaClient, args):
     print("-" * 50)
     for s in sections:
         print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+
+
+def cmd_custom_fields(client: AsanaClient, args):
+    """List custom fields for a project."""
+    fields = client.get_custom_field_settings(args.project_gid)
+    if args.json:
+        print(json.dumps(fields, indent=2))
+        return
+
+    for f in fields:
+        name = f.get("name", "N/A")
+        gid = f.get("gid", "N/A")
+        ftype = f.get("type", "unknown")
+        print(f"\n{name} ({gid}) [{ftype}]")
+        if ftype == "enum":
+            for opt in f.get("enum_options", []):
+                if opt.get("enabled", True):
+                    print(f"  {opt.get('name', 'N/A'):<30} {opt.get('gid', 'N/A')}")
 
 
 def cmd_stories(client: AsanaClient, args):
@@ -1215,6 +1249,7 @@ def main():
     create.add_argument("-n", "--notes", help="Description")
     create.add_argument("-m", "--markdown", action="store_true",
                         help="Convert notes from markdown to rich text")
+    create.add_argument("--custom-fields", help='JSON object mapping field GIDs to values, e.g. \'{"12345": "value"}\'')
     create.set_defaults(func=cmd_create)
 
     # update
@@ -1227,6 +1262,7 @@ def main():
     update.add_argument("-n", "--notes", help="Description/notes")
     update.add_argument("-m", "--markdown", action="store_true",
                         help="Convert notes from markdown to rich text")
+    update.add_argument("--custom-fields", help='JSON object mapping field GIDs to values, e.g. \'{"12345": "value"}\'')
     update.set_defaults(func=cmd_update)
 
     # comment
@@ -1246,6 +1282,11 @@ def main():
     sections = subparsers.add_parser("sections", help="List project sections")
     sections.add_argument("project_gid", help="Project GID")
     sections.set_defaults(func=cmd_sections)
+
+    # custom-fields
+    cfields = subparsers.add_parser("custom-fields", help="List custom fields for a project")
+    cfields.add_argument("project_gid", help="Project GID")
+    cfields.set_defaults(func=cmd_custom_fields)
 
     # stories
     stories = subparsers.add_parser("stories", help="Get task stories (activity)")
