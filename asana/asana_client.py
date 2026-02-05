@@ -1190,6 +1190,158 @@ def cmd_markdown(client: AsanaClient, args):
     print(result)
 
 
+# =============================================================================
+# Goals Commands (uses asana_sdk)
+# =============================================================================
+
+
+def _get_workspace_gid():
+    """Get workspace GID from env or first available."""
+    ws = os.environ.get("ASANA_WORKSPACE")
+    if ws:
+        return ws
+    # Fall back to first workspace
+    from asana_sdk import get_workspaces
+    workspaces = get_workspaces()
+    if not workspaces:
+        raise AsanaError("No workspaces found")
+    return workspaces[0]["gid"]
+
+
+def cmd_goals(client: AsanaClient, args):
+    """List goals in workspace."""
+    from asana_sdk import get_goals
+
+    workspace_gid = _get_workspace_gid()
+    goals = get_goals(
+        workspace_gid=workspace_gid,
+        team_gid=args.team,
+        time_period_gid=getattr(args, 'time_period', None),
+        limit=args.limit,
+    )
+
+    if args.json:
+        print(json.dumps(goals, indent=2))
+        return
+
+    if not goals:
+        print("No goals found")
+        return
+
+    print(f"{'GID':<20} {'Status':<12} {'Goal Name'}")
+    print("-" * 70)
+    for g in goals:
+        status = g.get("status") or "-"
+        name = g.get("name", "Untitled")[:45]
+        print(f"{g['gid']:<20} {status:<12} {name}")
+    print(f"\n({len(goals)} goals)")
+
+
+def cmd_goal(client: AsanaClient, args):
+    """Get goal details."""
+    from asana_sdk import get_goal
+
+    goal = get_goal(
+        args.goal_gid,
+        opt_fields=["name", "owner", "status", "due_on", "start_on", "notes",
+                    "metric", "workspace", "team", "time_period"]
+    )
+
+    if args.json:
+        print(json.dumps(goal, indent=2))
+        return
+
+    print(f"Goal: {goal.get('name')}")
+    print(f"GID: {args.goal_gid}")
+    print(f"URL: https://app.asana.com/0/{args.goal_gid}")
+    print(f"Status: {goal.get('status') or 'Not set'}")
+    print(f"Due: {goal.get('due_on') or 'None'}")
+    print(f"Start: {goal.get('start_on') or 'None'}")
+
+    owner = goal.get("owner")
+    if owner:
+        print(f"Owner: {owner.get('name', owner.get('gid'))}")
+
+    metric = goal.get("metric")
+    if metric:
+        current = metric.get("current_number_value", 0)
+        target = metric.get("target_number_value", 0)
+        unit = metric.get("unit", "")
+        print(f"Progress: {current}/{target} {unit}")
+
+    notes = goal.get("notes")
+    if notes:
+        print(f"\nDescription:\n{notes}")
+
+
+def cmd_create_goal(client: AsanaClient, args):
+    """Create a goal."""
+    from asana_sdk import create_goal
+
+    workspace_gid = _get_workspace_gid()
+    goal_gid = create_goal(
+        name=args.name,
+        workspace_gid=workspace_gid,
+        owner_gid=args.owner,
+        due_on=args.due,
+        start_on=args.start,
+        status=args.status,
+        notes=args.notes,
+    )
+
+    if args.json:
+        print(json.dumps({"gid": goal_gid}, indent=2))
+        return
+
+    print(f"Created goal: {args.name}")
+    print(f"GID: {goal_gid}")
+    print(f"URL: https://app.asana.com/0/{goal_gid}")
+
+
+def cmd_update_goal(client: AsanaClient, args):
+    """Update a goal."""
+    from asana_sdk import update_goal
+
+    kwargs = {}
+    if args.name:
+        kwargs["name"] = args.name
+    if args.owner:
+        kwargs["owner_gid"] = args.owner
+    if args.due:
+        kwargs["due_on"] = args.due
+    if args.start:
+        kwargs["start_on"] = args.start
+    if args.status:
+        kwargs["status"] = args.status
+    if args.notes:
+        kwargs["notes"] = args.notes
+
+    if not kwargs:
+        print("No updates specified", file=sys.stderr)
+        sys.exit(1)
+
+    update_goal(args.goal_gid, **kwargs)
+
+    if args.json:
+        print(json.dumps({"updated": True, "gid": args.goal_gid}, indent=2))
+        return
+
+    print(f"Updated goal {args.goal_gid}")
+
+
+def cmd_goal_metric(client: AsanaClient, args):
+    """Update goal metric progress."""
+    from asana_sdk import update_goal_metric
+
+    result = update_goal_metric(args.goal_gid, current_number_value=args.value)
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    print(f"Updated goal {args.goal_gid} metric to {args.value}")
+
+
 def main():
     epilog = """\
 Examples:
@@ -1338,6 +1490,47 @@ Environment:
     markdown.add_argument("text", nargs="?", help="Markdown text (or pipe via stdin)")
     markdown.add_argument("--unwrap", action="store_true", help="Output without <body> wrapper")
     markdown.set_defaults(func=cmd_markdown, no_client=True)
+
+    # goals (uses asana_sdk, not the REST client)
+    goals = subparsers.add_parser("goals", help="List goals in workspace")
+    goals.add_argument("-t", "--team", help="Filter by team GID")
+    goals.add_argument("-p", "--time-period", dest="time_period", help="Filter by time period GID (e.g., Q1 FY26)")
+    goals.add_argument("-l", "--limit", type=int, default=50)
+    goals.set_defaults(func=cmd_goals, no_client=True)
+
+    # goal
+    goal = subparsers.add_parser("goal", help="Get goal details")
+    goal.add_argument("goal_gid", help="Goal GID")
+    goal.set_defaults(func=cmd_goal, no_client=True)
+
+    # create-goal
+    create_goal = subparsers.add_parser("create-goal", help="Create a goal")
+    create_goal.add_argument("name", help="Goal name")
+    create_goal.add_argument("-o", "--owner", help="Owner user GID")
+    create_goal.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
+    create_goal.add_argument("-s", "--start", help="Start date (YYYY-MM-DD)")
+    create_goal.add_argument("--status", choices=["green", "yellow", "red", "achieved", "partial", "missed", "dropped"],
+                             help="Goal status (requires metric to be set first)")
+    create_goal.add_argument("-n", "--notes", help="Description")
+    create_goal.set_defaults(func=cmd_create_goal, no_client=True)
+
+    # update-goal
+    update_goal = subparsers.add_parser("update-goal", help="Update a goal")
+    update_goal.add_argument("goal_gid", help="Goal GID")
+    update_goal.add_argument("--name", help="New name")
+    update_goal.add_argument("-o", "--owner", help="Owner user GID")
+    update_goal.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
+    update_goal.add_argument("-s", "--start", help="Start date (YYYY-MM-DD)")
+    update_goal.add_argument("--status", choices=["green", "yellow", "red", "achieved", "partial", "missed", "dropped"],
+                             help="Goal status (requires metric to be set first)")
+    update_goal.add_argument("-n", "--notes", help="Description")
+    update_goal.set_defaults(func=cmd_update_goal, no_client=True)
+
+    # goal-metric
+    goal_metric = subparsers.add_parser("goal-metric", help="Update goal metric progress")
+    goal_metric.add_argument("goal_gid", help="Goal GID")
+    goal_metric.add_argument("value", type=float, help="Current metric value")
+    goal_metric.set_defaults(func=cmd_goal_metric, no_client=True)
 
     # help
     subparsers.add_parser("help", help="Show this help message")
