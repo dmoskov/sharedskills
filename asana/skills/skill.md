@@ -2,32 +2,32 @@
 
 Use `asana` for all Asana operations. Direct REST API with 30s timeouts and automatic retry.
 
-## Critical: Flag Positioning
+## Output Flags
 
-`--json` and `-v` are **top-level flags** and MUST come BEFORE the subcommand:
+`--json` and `-v` work in any position:
 
 ```bash
-asana --json tasks -p <gid>       # CORRECT
-asana -v sections <project_gid>   # CORRECT
-asana tasks -p <gid> --json       # WRONG - will error
-asana sections <gid> -v           # WRONG - will error
+asana --json tasks -p <gid>       # Before subcommand
+asana tasks -p <gid> --json       # After subcommand
+asana sections <gid> -v           # After subcommand
 ```
 
 ## Critical: Markdown Flag
 
-`-m` / `--markdown` is a **boolean toggle**, not a value flag. It converts the text in `-n` (notes) or the comment positional arg to Asana rich text. Never pass text after `-m`.
+`-m` / `--markdown` enables markdown-to-rich-text conversion. Two usage patterns:
 
 ```bash
-# create: body goes in -n, markdown toggle is -m
-asana create "Task" -n "## Summary\n- Point one" -m       # CORRECT
-asana create "Task" -m "## Summary"                        # WRONG - -m takes no value
+# Pattern 1: -n for body, -m as toggle
+asana create "Task" -n "## Summary\n- Point one" -m
+asana update <gid> -n "**Done:** fixed bug" -m
 
-# update: same pattern
-asana update <gid> -n "**Done:** fixed bug" -m             # CORRECT
+# Pattern 2: -m with text (shorthand for -n "text" -m)
+asana create "Task" -m "## Summary\n- Point one"
+asana update <gid> -m "**Done:** fixed bug"
 
 # comment: text is positional, -m is a flag
-asana comment <gid> "### Update\nFixed the **bug**" -m     # CORRECT
-asana comment <gid> "plain text without formatting"         # CORRECT (no -m needed)
+asana comment <gid> "### Update\nFixed the **bug**" -m
+asana comment <gid> "plain text without formatting"         # no -m needed
 ```
 
 Always use `-m` when text contains markdown (`**bold**`, `## headings`, `- lists`, `` `code` ``).
@@ -51,6 +51,9 @@ asana tasks -p <project_gid>           # Tasks in project (default: 100)
 asana tasks -s <section_gid>           # Tasks in section
 asana tasks -p <gid> -i                # Incomplete only
 asana tasks -p <gid> -i -l 50         # Incomplete, limit 50
+asana tasks -p <gid> -a me -i         # My incomplete tasks in project
+asana tasks -p <gid> -a <user_gid>    # Tasks assigned to specific user
+asana tasks -a me -i                   # All my incomplete tasks (any project)
 
 asana search "query text"              # Search tasks
 asana search "query" -i                # Incomplete only
@@ -111,15 +114,16 @@ asana goal-metric <gid> 75             # Update metric progress
 
 ## Output Options
 
-| Flag | Position | Effect |
-|------|----------|--------|
-| `--json` | Before subcommand | Raw JSON output |
-| `-v` / `--verbose` | Before subcommand | Show GIDs in formatted output |
+| Flag | Effect |
+|------|--------|
+| `--json` | Raw JSON output |
+| `-v` / `--verbose` | Show GIDs in formatted output |
 
+Flags work in any position:
 ```bash
-asana --json task <gid>              # JSON output
-asana -v tasks -p <gid>             # Show GIDs in table
-asana --json -v tasks -p <gid>      # Both flags
+asana --json task <gid>              # Before subcommand
+asana task <gid> --json              # After subcommand
+asana tasks -p <gid> -v --json      # Mixed with other flags
 ```
 
 ## Supported Markdown
@@ -136,11 +140,8 @@ When using `-m` flag, these are converted to Asana rich text:
 
 ## Common Agent Mistakes
 
-1. **Putting `--json`/`-v` after the subcommand** → Use `asana --json <cmd>` not `asana <cmd> --json`
-2. **Passing text to `-m`** → `-m` is a boolean flag. Body text goes in `-n` (create/update) or as positional arg (comment)
-3. **Forgetting `-m` on markdown content** → Without it, `**bold**` renders as literal asterisks
-4. **Using `tasks` when `search` is needed** → `tasks` filters by project/section only. For assignee filtering, use `search -a`
-5. **Assuming all results are returned** → Default limits: tasks=100, search=50. Use `-l` to adjust. When count equals limit, there may be more results.
+1. **Forgetting `-m` on markdown content** → Without it, `**bold**` renders as literal asterisks
+2. **Assuming all results are returned** → Default limits: tasks=100, search=50. Use `-l` to adjust. The CLI warns when the limit is reached.
 
 ## Configuration
 
