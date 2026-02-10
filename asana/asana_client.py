@@ -873,6 +873,13 @@ class AsanaClient:
 
 # ========== CLI ==========
 
+def format_count(count: int, limit: int, label: str = "tasks") -> str:
+    """Format result count with limit-reached indicator."""
+    if count >= limit:
+        return f"\n({count} {label} shown, more exist - use -l to increase limit)"
+    return f"\n({count} {label})"
+
+
 def format_task(task: dict, verbose: bool = False) -> str:
     """Format task for display."""
     status = "✓" if task.get("completed") else " "
@@ -896,11 +903,15 @@ def cmd_workspaces(client: AsanaClient, args):
         print(json.dumps(workspaces, indent=2))
         return
 
-    print(f"{'GID':<20} {'Name':<40} {'Organization'}")
-    print("-" * 70)
-    for ws in workspaces:
-        org = "Yes" if ws.get("is_organization") else "No"
-        print(f"{ws['gid']:<20} {ws['name']:<40} {org}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Name':<40} {'Organization'}")
+        print("-" * 70)
+        for ws in workspaces:
+            org = "Yes" if ws.get("is_organization") else "No"
+            print(f"{ws['gid']:<20} {ws['name']:<40} {org}")
+    else:
+        for ws in workspaces:
+            print(ws["name"])
 
 
 def cmd_projects(client: AsanaClient, args):
@@ -910,11 +921,16 @@ def cmd_projects(client: AsanaClient, args):
         print(json.dumps(projects, indent=2))
         return
 
-    print(f"{'GID':<20} {'Due':<12} {'Project Name'}")
-    print("-" * 60)
-    for p in projects:
-        due = p.get("due_on") or "-"
-        print(f"{p['gid']:<20} {due:<12} {p['name']}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Due':<12} {'Project Name'}")
+        print("-" * 60)
+        for p in projects:
+            due = p.get("due_on") or "-"
+            print(f"{p['gid']:<20} {due:<12} {p['name']}")
+    else:
+        for p in projects:
+            due = p.get("due_on") or "-"
+            print(f"{due:<12} {p['name']}")
 
 
 def cmd_task(client: AsanaClient, args):
@@ -942,19 +958,30 @@ def cmd_task(client: AsanaClient, args):
 
 def cmd_tasks(client: AsanaClient, args):
     """List tasks."""
-    tasks = client.get_tasks(
-        project=args.project,
-        section=args.section,
-        completed=False if args.incomplete else None,
-        limit=args.limit,
-    )
+    # project + assignee: delegate to search API (GET /tasks doesn't support both)
+    if args.assignee and (args.project or args.section):
+        tasks = client.search_tasks(
+            assignee=args.assignee,
+            projects=args.project,
+            completed=False if args.incomplete else None,
+            limit=args.limit,
+        )
+    else:
+        tasks = client.get_tasks(
+            project=args.project,
+            section=args.section,
+            assignee=args.assignee,
+            completed=False if args.incomplete else None,
+            limit=args.limit,
+        )
+
     if args.json:
         print(json.dumps(tasks, indent=2))
         return
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
-    print(f"\n({len(tasks)} tasks)")
+    print(format_count(len(tasks), args.limit))
 
 
 def cmd_search(client: AsanaClient, args):
@@ -976,7 +1003,7 @@ def cmd_search(client: AsanaClient, args):
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
-    print(f"\n({len(tasks)} tasks)")
+    print(format_count(len(tasks), args.limit))
 
 
 def cmd_my_tasks(client: AsanaClient, args):
@@ -992,13 +1019,18 @@ def cmd_my_tasks(client: AsanaClient, args):
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
-    print(f"\n({len(tasks)} tasks)")
+    print(format_count(len(tasks), args.limit))
 
 
 def cmd_create(client: AsanaClient, args):
     """Create task."""
     notes = args.notes
     html_notes = None
+
+    # Support -m "text" as shorthand for -n "text" -m
+    if isinstance(args.markdown, str):
+        notes = args.markdown
+        args.markdown = True
 
     if args.markdown and notes:
         html_notes = markdown_to_asana_html(notes)
@@ -1028,6 +1060,11 @@ def cmd_create(client: AsanaClient, args):
 
 def cmd_update(client: AsanaClient, args):
     """Update task."""
+    # Support -m "text" as shorthand for -n "text" -m
+    if isinstance(args.markdown, str):
+        args.notes = args.markdown
+        args.markdown = True
+
     updates = {}
     if args.name:
         updates["name"] = args.name
@@ -1093,10 +1130,14 @@ def cmd_sections(client: AsanaClient, args):
         print(json.dumps(sections, indent=2))
         return
 
-    print(f"{'GID':<20} {'Section Name'}")
-    print("-" * 50)
-    for s in sections:
-        print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Section Name'}")
+        print("-" * 50)
+        for s in sections:
+            print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+    else:
+        for s in sections:
+            print(s.get("name", "N/A"))
 
 
 def cmd_custom_fields(client: AsanaClient, args):
@@ -1234,7 +1275,7 @@ def cmd_goals(client: AsanaClient, args):
         status = g.get("status") or "-"
         name = g.get("name", "Untitled")[:45]
         print(f"{g['gid']:<20} {status:<12} {name}")
-    print(f"\n({len(goals)} goals)")
+    print(format_count(len(goals), args.limit, "goals"))
 
 
 def cmd_goal(client: AsanaClient, args):
@@ -1394,6 +1435,7 @@ Environment:
     tasks = subparsers.add_parser("tasks", help="List tasks in project/section")
     tasks.add_argument("-p", "--project", help="Project GID")
     tasks.add_argument("-s", "--section", help="Section GID")
+    tasks.add_argument("-a", "--assignee", help="Filter by assignee (GID or 'me')")
     tasks.add_argument("-i", "--incomplete", action="store_true")
     tasks.add_argument("-l", "--limit", type=int, default=100)
     tasks.set_defaults(func=cmd_tasks)
@@ -1422,8 +1464,8 @@ Environment:
     create.add_argument("-a", "--assignee", help="Assignee (GID or 'me')")
     create.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
     create.add_argument("-n", "--notes", help="Description")
-    create.add_argument("-m", "--markdown", action="store_true",
-                        help="Convert notes from markdown to rich text")
+    create.add_argument("-m", "--markdown", nargs="?", const=True, default=False,
+                        help="Convert notes from markdown to rich text. Optionally pass text: -m \"## body\"")
     create.add_argument("--custom-fields", help='JSON object mapping field GIDs to values, e.g. \'{"12345": "value"}\'')
     create.set_defaults(func=cmd_create)
 
@@ -1435,8 +1477,8 @@ Environment:
     update.add_argument("-a", "--assignee", help="Assignee")
     update.add_argument("-d", "--due", help="Due date")
     update.add_argument("-n", "--notes", help="Description/notes")
-    update.add_argument("-m", "--markdown", action="store_true",
-                        help="Convert notes from markdown to rich text")
+    update.add_argument("-m", "--markdown", nargs="?", const=True, default=False,
+                        help="Convert notes from markdown to rich text. Optionally pass text: -m \"## body\"")
     update.add_argument("--custom-fields", help='JSON object mapping field GIDs to values, e.g. \'{"12345": "value"}\'')
     update.set_defaults(func=cmd_update)
 
@@ -1533,13 +1575,29 @@ Environment:
     goal_metric.set_defaults(func=cmd_goal_metric, no_client=True)
 
     # help
-    subparsers.add_parser("help", help="Show this help message")
+    help_parser = subparsers.add_parser("help", help="Show help for a command")
+    help_parser.add_argument("help_command", nargs="?", help="Command to get help for")
 
-    args = parser.parse_args()
+    # Normalize argv: move --json and -v to before the subcommand so they
+    # work in any position (e.g. "asana tasks -p X --json" works like
+    # "asana --json tasks -p X")
+    raw_args = sys.argv[1:]
+    global_flags = {"--json", "-v", "--verbose"}
+    hoisted = [a for a in raw_args if a in global_flags]
+    rest = [a for a in raw_args if a not in global_flags]
+    args = parser.parse_args(hoisted + rest)
 
-    # Show help if no command or 'help' command
-    if args.command is None or args.command == "help":
+    # Show help if no command
+    if args.command is None:
         parser.print_help()
+        sys.exit(0)
+
+    # Handle 'help <command>' by delegating to that command's -h
+    if args.command == "help":
+        if args.help_command and args.help_command in subparsers.choices:
+            subparsers.choices[args.help_command].print_help()
+        else:
+            parser.print_help()
         sys.exit(0)
 
     try:

@@ -52,7 +52,7 @@ export ASANA_WORKSPACE="your_workspace_gid"
 
 To find your workspace GID:
 ```bash
-python3 scripts/asana_client.py workspaces
+asana workspaces
 ```
 
 ## Verifying Setup
@@ -60,7 +60,7 @@ python3 scripts/asana_client.py workspaces
 Test that your token works:
 
 ```bash
-python3 scripts/asana_client.py workspaces
+asana workspaces
 ```
 
 You should see a list of your Asana workspaces.
