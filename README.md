@@ -10,10 +10,10 @@ Direct REST API client for Asana task management. Reliable 30-second timeouts, a
 
 ```bash
 # Install
-pip install requests
+cd asana && ./setup.sh
 
 # Use
-python3 asana/asana_client.py my-tasks -i
+asana my-tasks -i
 ```
 
 [Full documentation](./asana/README.md)
@@ -40,7 +40,7 @@ echo "LETTA_API_KEY=your_key" > ~/.claude/hooks/letta/.env
    ```
 
 2. Set up the tools you need:
-   - For Asana: `pip install requests` and set `ASANA_ACCESS_TOKEN`
+   - For Asana: `cd asana && ./setup.sh` and set `ASANA_ACCESS_TOKEN`
    - For Letta: Run `./letta/install.sh` and set `LETTA_API_KEY`
 
 ## Structure
@@ -49,6 +49,8 @@ echo "LETTA_API_KEY=your_key" > ~/.claude/hooks/letta/.env
 ai-dev-tools/
 ├── asana/                  # Asana CLI tool
 │   ├── asana_client.py     # Main client (CLI & library)
+│   ├── bin/asana           # CLI wrapper script
+│   ├── setup.sh            # Installer (venv + ~/bin symlink)
 │   ├── README.md           # Documentation
 │   └── SETUP.md            # Setup guide
 ├── letta/                  # Letta memory hooks
