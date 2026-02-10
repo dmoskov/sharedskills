@@ -337,39 +337,6 @@ class AsanaClient:
         result = self._request("GET", endpoint, params)
         return result.get("data", [])
 
-    def get_tasks_paginated(
-        self,
-        project: str = None,
-        section: str = None,
-        completed: bool = None,
-    ) -> List[Dict[str, Any]]:
-        """Get ALL tasks from project/section with automatic pagination."""
-        params = {
-            "opt_fields": "name,due_on,completed,assignee.name,projects.name",
-            "limit": "100",
-        }
-
-        if project:
-            endpoint = f"projects/{project}/tasks"
-        elif section:
-            endpoint = f"sections/{section}/tasks"
-        else:
-            raise ValueError("Must provide project or section")
-
-        if completed is not None:
-            params["completed_since"] = "now" if not completed else None
-
-        all_tasks = []
-        while True:
-            result = self._request("GET", endpoint, params)
-            all_tasks.extend(result.get("data", []))
-            next_page = result.get("next_page")
-            if not next_page or not next_page.get("offset"):
-                break
-            params["offset"] = next_page["offset"]
-
-        return all_tasks
-
     def search_tasks(
         self,
         text: str = None,
@@ -906,10 +873,8 @@ class AsanaClient:
 
 # ========== CLI ==========
 
-def format_count(count: int, limit: int, label: str = "tasks", total: int = None) -> str:
+def format_count(count: int, limit: int, label: str = "tasks") -> str:
     """Format result count with limit-reached indicator."""
-    if total is not None and count < total:
-        return f"\n({count} {label} shown, {total} total)"
     if count >= limit:
         return f"\n({count} {label}, limit reached - use -l to show more)"
     return f"\n({count} {label})"
@@ -993,27 +958,21 @@ def cmd_task(client: AsanaClient, args):
 
 def cmd_tasks(client: AsanaClient, args):
     """List tasks."""
-    total_count = None
-
-    # If assignee is provided without project/section, use it as the primary filter
-    if args.assignee and not args.project and not args.section:
+    # If assignee + project/section: delegate to search API (supports both natively)
+    if args.assignee and (args.project or args.section):
+        tasks = client.search_tasks(
+            assignee=args.assignee,
+            projects=args.project,
+            completed=False if args.incomplete else None,
+            limit=args.limit,
+        )
+    elif args.assignee:
+        # Assignee alone: use tasks API with assignee endpoint
         tasks = client.get_tasks(
             assignee=args.assignee,
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
-    elif args.assignee:
-        # Post-filter by assignee: must paginate to get all tasks first
-        all_tasks = client.get_tasks_paginated(
-            project=args.project,
-            section=args.section,
-            completed=False if args.incomplete else None,
-        )
-        total_count = len(all_tasks)
-        assignee_gid = args.assignee
-        if assignee_gid == "me":
-            assignee_gid = client._request("GET", "users/me", {}).get("data", {}).get("gid")
-        tasks = [t for t in all_tasks if t.get("assignee") and t["assignee"].get("gid") == assignee_gid]
     else:
         tasks = client.get_tasks(
             project=args.project,
@@ -1028,19 +987,7 @@ def cmd_tasks(client: AsanaClient, args):
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
-
-    if args.assignee and total_count is not None:
-        print(f"\n({len(tasks)} tasks matching assignee, {total_count} total in project)")
-    elif len(tasks) >= args.limit and (args.project or args.section):
-        # Limit reached — count total via pagination
-        all_tasks = client.get_tasks_paginated(
-            project=args.project,
-            section=args.section,
-            completed=False if args.incomplete else None,
-        )
-        print(format_count(len(tasks), args.limit, total=len(all_tasks)))
-    else:
-        print(format_count(len(tasks), args.limit))
+    print(format_count(len(tasks), args.limit))
 
 
 def cmd_search(client: AsanaClient, args):
