@@ -337,6 +337,39 @@ class AsanaClient:
         result = self._request("GET", endpoint, params)
         return result.get("data", [])
 
+    def get_tasks_paginated(
+        self,
+        project: str = None,
+        section: str = None,
+        completed: bool = None,
+    ) -> List[Dict[str, Any]]:
+        """Get ALL tasks from project/section with automatic pagination."""
+        params = {
+            "opt_fields": "name,due_on,completed,assignee.name,projects.name",
+            "limit": "100",
+        }
+
+        if project:
+            endpoint = f"projects/{project}/tasks"
+        elif section:
+            endpoint = f"sections/{section}/tasks"
+        else:
+            raise ValueError("Must provide project or section")
+
+        if completed is not None:
+            params["completed_since"] = "now" if not completed else None
+
+        all_tasks = []
+        while True:
+            result = self._request("GET", endpoint, params)
+            all_tasks.extend(result.get("data", []))
+            next_page = result.get("next_page")
+            if not next_page or not next_page.get("offset"):
+                break
+            params["offset"] = next_page["offset"]
+
+        return all_tasks
+
     def search_tasks(
         self,
         text: str = None,
@@ -873,8 +906,10 @@ class AsanaClient:
 
 # ========== CLI ==========
 
-def format_count(count: int, limit: int, label: str = "tasks") -> str:
+def format_count(count: int, limit: int, label: str = "tasks", total: int = None) -> str:
     """Format result count with limit-reached indicator."""
+    if total is not None and count < total:
+        return f"\n({count} {label} shown, {total} total)"
     if count >= limit:
         return f"\n({count} {label}, limit reached - use -l to show more)"
     return f"\n({count} {label})"
@@ -903,11 +938,15 @@ def cmd_workspaces(client: AsanaClient, args):
         print(json.dumps(workspaces, indent=2))
         return
 
-    print(f"{'GID':<20} {'Name':<40} {'Organization'}")
-    print("-" * 70)
-    for ws in workspaces:
-        org = "Yes" if ws.get("is_organization") else "No"
-        print(f"{ws['gid']:<20} {ws['name']:<40} {org}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Name':<40} {'Organization'}")
+        print("-" * 70)
+        for ws in workspaces:
+            org = "Yes" if ws.get("is_organization") else "No"
+            print(f"{ws['gid']:<20} {ws['name']:<40} {org}")
+    else:
+        for ws in workspaces:
+            print(ws["name"])
 
 
 def cmd_projects(client: AsanaClient, args):
@@ -917,11 +956,16 @@ def cmd_projects(client: AsanaClient, args):
         print(json.dumps(projects, indent=2))
         return
 
-    print(f"{'GID':<20} {'Due':<12} {'Project Name'}")
-    print("-" * 60)
-    for p in projects:
-        due = p.get("due_on") or "-"
-        print(f"{p['gid']:<20} {due:<12} {p['name']}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Due':<12} {'Project Name'}")
+        print("-" * 60)
+        for p in projects:
+            due = p.get("due_on") or "-"
+            print(f"{p['gid']:<20} {due:<12} {p['name']}")
+    else:
+        for p in projects:
+            due = p.get("due_on") or "-"
+            print(f"{due:<12} {p['name']}")
 
 
 def cmd_task(client: AsanaClient, args):
@@ -949,6 +993,8 @@ def cmd_task(client: AsanaClient, args):
 
 def cmd_tasks(client: AsanaClient, args):
     """List tasks."""
+    total_count = None
+
     # If assignee is provided without project/section, use it as the primary filter
     if args.assignee and not args.project and not args.section:
         tasks = client.get_tasks(
@@ -956,6 +1002,18 @@ def cmd_tasks(client: AsanaClient, args):
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
+    elif args.assignee:
+        # Post-filter by assignee: must paginate to get all tasks first
+        all_tasks = client.get_tasks_paginated(
+            project=args.project,
+            section=args.section,
+            completed=False if args.incomplete else None,
+        )
+        total_count = len(all_tasks)
+        assignee_gid = args.assignee
+        if assignee_gid == "me":
+            assignee_gid = client._request("GET", "users/me", {}).get("data", {}).get("gid")
+        tasks = [t for t in all_tasks if t.get("assignee") and t["assignee"].get("gid") == assignee_gid]
     else:
         tasks = client.get_tasks(
             project=args.project,
@@ -963,12 +1021,6 @@ def cmd_tasks(client: AsanaClient, args):
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
-        # Post-filter by assignee when combined with project/section
-        if args.assignee:
-            assignee_gid = args.assignee
-            if assignee_gid == "me":
-                assignee_gid = client._request("GET", "users/me", {}).get("data", {}).get("gid")
-            tasks = [t for t in tasks if t.get("assignee") and t["assignee"].get("gid") == assignee_gid]
 
     if args.json:
         print(json.dumps(tasks, indent=2))
@@ -976,7 +1028,19 @@ def cmd_tasks(client: AsanaClient, args):
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
-    print(format_count(len(tasks), args.limit))
+
+    if args.assignee and total_count is not None:
+        print(f"\n({len(tasks)} tasks matching assignee, {total_count} total in project)")
+    elif len(tasks) >= args.limit and (args.project or args.section):
+        # Limit reached — count total via pagination
+        all_tasks = client.get_tasks_paginated(
+            project=args.project,
+            section=args.section,
+            completed=False if args.incomplete else None,
+        )
+        print(format_count(len(tasks), args.limit, total=len(all_tasks)))
+    else:
+        print(format_count(len(tasks), args.limit))
 
 
 def cmd_search(client: AsanaClient, args):
@@ -1125,10 +1189,14 @@ def cmd_sections(client: AsanaClient, args):
         print(json.dumps(sections, indent=2))
         return
 
-    print(f"{'GID':<20} {'Section Name'}")
-    print("-" * 50)
-    for s in sections:
-        print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+    if args.verbose:
+        print(f"{'GID':<20} {'Section Name'}")
+        print("-" * 50)
+        for s in sections:
+            print(f"{s.get('gid', 'N/A'):<20} {s.get('name', 'N/A')}")
+    else:
+        for s in sections:
+            print(s.get("name", "N/A"))
 
 
 def cmd_custom_fields(client: AsanaClient, args):
