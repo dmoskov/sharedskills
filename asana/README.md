@@ -87,14 +87,14 @@ Get a PAT from https://app.asana.com/0/my-apps
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install requests
+# Install (creates venv, installs deps, links `asana` to ~/bin)
+cd asana && ./setup.sh
 
 # Test your setup
-python3 asana_client.py workspaces
+asana workspaces
 
 # Get your tasks
-python3 asana_client.py my-tasks -i
+asana my-tasks -i
 ```
 
 ## Commands
