@@ -958,7 +958,7 @@ def cmd_task(client: AsanaClient, args):
 
 def cmd_tasks(client: AsanaClient, args):
     """List tasks."""
-    # If assignee + project/section: delegate to search API (supports both natively)
+    # project + assignee: delegate to search API (GET /tasks doesn't support both)
     if args.assignee and (args.project or args.section):
         tasks = client.search_tasks(
             assignee=args.assignee,
@@ -966,17 +966,11 @@ def cmd_tasks(client: AsanaClient, args):
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
-    elif args.assignee:
-        # Assignee alone: use tasks API with assignee endpoint
-        tasks = client.get_tasks(
-            assignee=args.assignee,
-            completed=False if args.incomplete else None,
-            limit=args.limit,
-        )
     else:
         tasks = client.get_tasks(
             project=args.project,
             section=args.section,
+            assignee=args.assignee,
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
