@@ -4,13 +4,15 @@ Use `asana` for all Asana operations. Direct REST API with 30s timeouts and auto
 
 ## Output Flags
 
-`--json` and `-v` work in any position:
+`--json` and `-v` work in any position (before or after subcommand):
 
 ```bash
 asana --json tasks -p <gid>       # Before subcommand
 asana tasks -p <gid> --json       # After subcommand
-asana sections <gid> -v           # After subcommand
+asana sections <gid> -v           # Show GIDs
 ```
+
+`-v` controls whether GIDs are shown. Without it, output is clean names only.
 
 ## Critical: Markdown Flag
 
@@ -65,8 +67,10 @@ asana search -t "query" -i -l 20      # Text via flag, incomplete, limit 20
 asana my-tasks                          # All my tasks
 asana my-tasks -i                       # My incomplete tasks
 
-asana sections <project_gid>           # List sections in project
+asana sections <project_gid>           # List sections (names only, use -v for GIDs)
 asana custom-fields <project_gid>      # List custom fields
+
+asana help search                       # Help for a specific command
 ```
 
 ### Write
@@ -117,14 +121,25 @@ asana goal-metric <gid> 75             # Update metric progress
 | Flag | Effect |
 |------|--------|
 | `--json` | Raw JSON output |
-| `-v` / `--verbose` | Show GIDs in formatted output |
+| `-v` / `--verbose` | Show GIDs in formatted output (sections, projects, workspaces, tasks) |
 
-Flags work in any position:
-```bash
-asana --json task <gid>              # Before subcommand
-asana task <gid> --json              # After subcommand
-asana tasks -p <gid> -v --json      # Mixed with other flags
+Default output shows clean names/data without GIDs. Use `-v` when you need GIDs for follow-up commands.
+
+## Result Limits
+
+Default limits: tasks=100, search=50. When results hit the limit, the CLI shows:
+
 ```
+(100 tasks shown, more exist - use -l to increase limit)
+```
+
+Use `-l` to adjust:
+```bash
+asana tasks -p <gid> -l 200           # Fetch up to 200 tasks
+asana search "query" -l 100            # Search up to 100 results
+```
+
+**Note:** When combining `-a` (assignee) with `-p` (project), the CLI delegates to the search API since `GET /tasks` doesn't support both filters together.
 
 ## Supported Markdown
 
@@ -141,7 +156,7 @@ When using `-m` flag, these are converted to Asana rich text:
 ## Common Agent Mistakes
 
 1. **Forgetting `-m` on markdown content** → Without it, `**bold**` renders as literal asterisks
-2. **Assuming all results are returned** → Default limits: tasks=100, search=50. Use `-l` to adjust. The CLI warns when the limit is reached.
+2. **Not using `-v` when GIDs are needed** → Default output omits GIDs for readability. Use `-v` to see them for follow-up commands.
 
 ## Configuration
 
