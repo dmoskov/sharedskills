@@ -876,7 +876,7 @@ class AsanaClient:
 def format_count(count: int, limit: int, label: str = "tasks") -> str:
     """Format result count with limit-reached indicator."""
     if count >= limit:
-        return f"\n({count} {label}, limit reached - use -l to show more)"
+        return f"\n({count} {label} shown, more exist - use -l to increase limit)"
     return f"\n({count} {label})"
 
 
