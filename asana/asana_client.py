@@ -42,6 +42,7 @@ except ImportError:
     print("Error: requests package required. Install with: pip install requests")
     sys.exit(1)
 
+from asana_to_markdown import asana_html_to_markdown
 from markdown_to_asana import markdown_to_asana_html
 
 # Configure logging
@@ -298,7 +299,7 @@ class AsanaClient:
     def get_task(self, task_gid: str) -> Dict[str, Any]:
         """Get task details."""
         params = {
-            "opt_fields": "name,notes,due_on,completed,assignee.name,projects.name,"
+            "opt_fields": "name,notes,html_notes,due_on,completed,assignee.name,projects.name,"
                           "custom_fields.name,custom_fields.display_value,tags.name,"
                           "memberships.section.name,dependencies,dependents"
         }
@@ -344,9 +345,16 @@ class AsanaClient:
         assignee: str = None,
         projects: str = None,
         completed: bool = None,
+        custom_fields: Optional[Dict[str, str]] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        """Search tasks with filters."""
+        """Search tasks with filters.
+
+        Args:
+            custom_fields: Dict mapping custom field GIDs to enum option GIDs.
+                           e.g. {"1213217236613486": "1213217236613488"} filters
+                           for Status=Triaged.
+        """
         params = {
             "opt_fields": "name,due_on,completed,assignee.name,projects.name",
             "limit": str(min(limit, 100)),
@@ -362,6 +370,9 @@ class AsanaClient:
             params["projects.any"] = projects
         if completed is not None:
             params["completed"] = str(completed).lower()
+        if custom_fields:
+            for field_gid, value_gid in custom_fields.items():
+                params[f"custom_fields.{field_gid}.value"] = value_gid
 
         ws = self._get_workspace(workspace)
         result = self._request("GET", f"workspaces/{ws}/tasks/search", params)
@@ -951,7 +962,10 @@ def cmd_task(client: AsanaClient, args):
     if projects:
         print(f"Projects: {', '.join(p['name'] for p in projects)}")
 
-    notes = task.get("notes")
+    if getattr(args, "markdown", False) and task.get("html_notes"):
+        notes = asana_html_to_markdown(task["html_notes"])
+    else:
+        notes = task.get("notes")
     if notes:
         print(f"\nDescription:\n{notes}")
 
@@ -989,12 +1003,17 @@ def cmd_search(client: AsanaClient, args):
     # Support both positional query and -t/--text flag
     text = args.text or args.query
 
+    custom_fields = None
+    if args.custom_field:
+        custom_fields = {field_gid: value_gid for field_gid, value_gid in args.custom_field}
+
     tasks = client.search_tasks(
         text=text,
         workspace=args.workspace,
         assignee=args.assignee,
         projects=args.projects,
         completed=False if args.incomplete else None,
+        custom_fields=custom_fields,
         limit=args.limit,
     )
     if args.json:
@@ -1429,6 +1448,8 @@ Environment:
     # task
     task = subparsers.add_parser("task", help="Get task details")
     task.add_argument("task_gid", help="Task GID")
+    task.add_argument("-m", "--markdown", action="store_true",
+                      help="Display description as markdown (converts from Asana rich text)")
     task.set_defaults(func=cmd_task)
 
     # tasks
@@ -1449,6 +1470,8 @@ Environment:
     search.add_argument("-w", "--workspace", help="Workspace GID")
     search.add_argument("-i", "--incomplete", action="store_true")
     search.add_argument("-l", "--limit", type=int, default=50)
+    search.add_argument("--custom-field", nargs=2, action="append", metavar=("FIELD_GID", "VALUE_GID"),
+                        help="Filter by custom field: --custom-field FIELD_GID VALUE_GID (repeatable)")
     search.set_defaults(func=cmd_search)
 
     # my-tasks
@@ -1480,6 +1503,7 @@ Environment:
     update.add_argument("-m", "--markdown", nargs="?", const=True, default=False,
                         help="Convert notes from markdown to rich text. Optionally pass text: -m \"## body\"")
     update.add_argument("--custom-fields", help='JSON object mapping field GIDs to values, e.g. \'{"12345": "value"}\'')
+
     update.set_defaults(func=cmd_update)
 
     # comment
