@@ -66,8 +66,8 @@ class AsanaRenderer(mistune.HTMLRenderer):
         return f"<h{tag_level}>{text}</h{tag_level}>"
 
     def paragraph(self, text: str) -> str:
-        """Paragraph - no wrapping tags, just text with newlines."""
-        return text + "\n"
+        """Paragraph - no wrapping tags, just text with double newline for visual spacing."""
+        return text + "\n\n"
 
     def link(self, text: str, url: str, title: Optional[str] = None) -> str:
         """Links: Asana only supports http/https protocols."""
@@ -105,9 +105,9 @@ class AsanaRenderer(mistune.HTMLRenderer):
         return f"<blockquote>{text}</blockquote>"
 
     def list(self, text: str, ordered: bool, **attrs) -> str:
-        """List container."""
+        """List container with trailing newline for spacing after list."""
         tag = "ol" if ordered else "ul"
-        return f"<{tag}>{text}</{tag}>"
+        return f"<{tag}>{text}</{tag}>\n"
 
     def list_item(self, text: str, **attrs) -> str:
         """List item."""
@@ -163,6 +163,10 @@ def markdown_to_asana_html(markdown: str) -> str:
 
     md = _create_markdown_parser()
     body = md(normalized)
+
+    # Reduce double newline before lists to single (paragraph adds \n\n but
+    # Asana's <ul>/<ol> already renders with top margin)
+    body = body.replace("\n\n<ul>", "\n<ul>").replace("\n\n<ol>", "\n<ol>")
 
     # Strip trailing newlines that mistune adds
     body = body.rstrip("\n")
