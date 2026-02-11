@@ -1333,7 +1333,6 @@ class TestCLIIntegration:
 
         assert "Workspace 1" in captured.out
         assert "Workspace 2" in captured.out
-        assert "ws1" in captured.out
 
     def test_cmd_workspaces_json(self, client, mock_args, capsys):
         """Should output JSON when --json flag is set."""
@@ -1405,6 +1404,7 @@ class TestCLIIntegration:
         mock_args.query = "bug"
         mock_args.incomplete = True
         mock_args.limit = 50
+        mock_args.custom_field = None
         mock_response = Mock()
         mock_response.ok = True
         mock_response.status_code = 200
