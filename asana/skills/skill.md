@@ -45,6 +45,7 @@ asana projects                          # List projects (add --archived for arch
 asana projects -l 100                   # Limit results
 
 asana task <gid>                        # Full task details
+asana task <gid> -m                     # Display description as markdown (converts rich text)
 asana subtasks <gid>                    # List subtasks
 asana stories <gid>                     # Comments and activity
 asana stories <gid> -l 20              # Limit to 20 entries
@@ -63,6 +64,7 @@ asana search "query" -a me             # Assigned to me
 asana search "query" -a <user_gid>     # Assigned to specific user
 asana search "query" -p <project_gid>  # Within project
 asana search -t "query" -i -l 20      # Text via flag, incomplete, limit 20
+asana search "query" --custom-field <field_gid> <value_gid>  # Filter by custom field (repeatable)
 
 asana my-tasks                          # All my tasks
 asana my-tasks -i                       # My incomplete tasks
