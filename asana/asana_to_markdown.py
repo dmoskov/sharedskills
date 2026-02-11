@@ -66,8 +66,12 @@ class AsanaToMarkdownConverter(HTMLParser):
         elif tag == "a":
             self.output.append("[")
         elif tag == "ul":
+            if self.list_stack:
+                self.output.append("\n")
             self.list_stack.append("ul")
         elif tag == "ol":
+            if self.list_stack:
+                self.output.append("\n")
             self.list_stack.append("ol")
             self.ol_counters.append(0)
         elif tag == "li":
