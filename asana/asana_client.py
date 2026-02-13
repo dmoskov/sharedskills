@@ -633,6 +633,24 @@ class AsanaClient:
         )
         return result.get("data", [])
 
+    def add_dependent(self, task_gid: str, dependent_gid: str) -> Dict[str, Any]:
+        """Make another task depend on this task (this task blocks dependent)."""
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/addDependents",
+            json_data={"data": {"dependents": [dependent_gid]}},
+        )
+        return result.get("data", {})
+
+    def remove_dependent(self, task_gid: str, dependent_gid: str) -> Dict[str, Any]:
+        """Remove a dependent from this task."""
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/removeDependents",
+            json_data={"data": {"dependents": [dependent_gid]}},
+        )
+        return result.get("data", {})
+
     def chain_dependencies(self, task_gids: List[str]) -> int:
         """
         Chain tasks sequentially so each depends on the previous.
@@ -1230,6 +1248,71 @@ def cmd_set_parent(client: AsanaClient, args):
         print(f"Task {args.task_gid} is now a standalone task (parent removed)")
 
 
+def cmd_dep(client: AsanaClient, args):
+    """Show, add, or remove task dependencies."""
+    action = getattr(args, "dep_action", None)
+
+    if action is None:
+        # Show dependencies and dependents for the task
+        task_gid = args.task_gid
+        dependencies = client.get_dependencies(task_gid)
+        dependents = client.get_dependents(task_gid)
+
+        if args.json:
+            print(json.dumps({"dependencies": dependencies, "dependents": dependents}, indent=2))
+            return
+
+        task = client.get_task(task_gid)
+        print(f"Dependencies for: {task.get('name', task_gid)}")
+        print()
+
+        if dependencies:
+            print("Blocked by:")
+            for dep in dependencies:
+                status = "✓" if dep.get("completed") else " "
+                print(f"  [{status}] {dep['gid']}  {dep.get('name', 'Untitled')}")
+        else:
+            print("Blocked by: (none)")
+
+        print()
+
+        if dependents:
+            print("Blocks:")
+            for dep in dependents:
+                status = "✓" if dep.get("completed") else " "
+                print(f"  [{status}] {dep['gid']}  {dep.get('name', 'Untitled')}")
+        else:
+            print("Blocks: (none)")
+
+    elif action == "add":
+        if args.blocked_by:
+            for other in args.blocked_by:
+                client.add_dependency(args.task_gid, other)
+                print(f"{args.task_gid} is now blocked by {other}")
+        if args.blocks:
+            for other in args.blocks:
+                client.add_dependent(args.task_gid, other)
+                print(f"{args.task_gid} now blocks {other}")
+
+    elif action == "rm":
+        if args.blocked_by:
+            for other in args.blocked_by:
+                client.remove_dependency(args.task_gid, other)
+                print(f"Removed: {args.task_gid} no longer blocked by {other}")
+        if args.blocks:
+            for other in args.blocks:
+                client.remove_dependent(args.task_gid, other)
+                print(f"Removed: {args.task_gid} no longer blocks {other}")
+
+    elif action == "chain":
+        gids = args.task_gids
+        if len(gids) < 2:
+            print("Error: need at least 2 task GIDs to chain", file=sys.stderr)
+            sys.exit(1)
+        count = client.chain_dependencies(gids)
+        print(f"Chained {count} dependencies: {' → '.join(gids)}")
+
+
 def cmd_markdown(client: AsanaClient, args):
     """Preview markdown to Asana HTML conversion."""
     # Get input from argument or stdin
@@ -1550,6 +1633,38 @@ Environment:
     setparent.add_argument("--before", help="Insert before this sibling subtask GID")
     setparent.add_argument("--after", help="Insert after this sibling subtask GID")
     setparent.set_defaults(func=cmd_set_parent)
+
+    # dep (dependencies)
+    dep = subparsers.add_parser("dep", help="Show/manage task dependencies")
+    dep_sub = dep.add_subparsers(dest="dep_action")
+
+    # dep <task_gid> (show)
+    dep.add_argument("task_gid", help="Task GID")
+    dep.set_defaults(func=cmd_dep)
+
+    # dep add <task_gid> --blocked-by/--blocks
+    dep_add = dep_sub.add_parser("add", help="Add dependency")
+    dep_add.add_argument("task_gid", help="Task GID")
+    dep_add.add_argument("--blocked-by", nargs="+", metavar="GID",
+                         help="Task GIDs that block this task")
+    dep_add.add_argument("--blocks", nargs="+", metavar="GID",
+                         help="Task GIDs that this task blocks")
+    dep_add.set_defaults(func=cmd_dep, dep_action="add")
+
+    # dep rm <task_gid> --blocked-by/--blocks
+    dep_rm = dep_sub.add_parser("rm", help="Remove dependency")
+    dep_rm.add_argument("task_gid", help="Task GID")
+    dep_rm.add_argument("--blocked-by", nargs="+", metavar="GID",
+                        help="Remove blockers from this task")
+    dep_rm.add_argument("--blocks", nargs="+", metavar="GID",
+                        help="Remove tasks this task blocks")
+    dep_rm.set_defaults(func=cmd_dep, dep_action="rm")
+
+    # dep chain <gid1> <gid2> ...
+    dep_chain = dep_sub.add_parser("chain", help="Chain tasks sequentially")
+    dep_chain.add_argument("task_gids", nargs="+", metavar="GID",
+                           help="Task GIDs in order (each depends on previous)")
+    dep_chain.set_defaults(func=cmd_dep, dep_action="chain")
 
     # markdown (preview converter - no client needed)
     markdown = subparsers.add_parser("markdown", help="Preview markdown to Asana HTML conversion")
