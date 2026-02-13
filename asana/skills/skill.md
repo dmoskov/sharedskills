@@ -75,6 +75,17 @@ asana custom-fields <project_gid>      # List custom fields
 asana help search                       # Help for a specific command
 ```
 
+### Dependencies
+```bash
+asana dep <task_gid>                             # Show blockers and dependents
+asana dep add <task_gid> --blocked-by <gid>      # Task is blocked by another
+asana dep add <task_gid> --blocks <gid>          # Task blocks another
+asana dep add <task_gid> --blocked-by <a> <b>    # Multiple blockers at once
+asana dep rm <task_gid> --blocked-by <gid>       # Remove a blocker
+asana dep rm <task_gid> --blocks <gid>           # Remove a dependent
+asana dep chain <gid1> <gid2> <gid3>             # Chain: gid1 → gid2 → gid3
+```
+
 ### Write
 
 ```bash
