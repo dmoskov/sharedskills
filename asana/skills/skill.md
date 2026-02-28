@@ -93,6 +93,7 @@ asana dep chain <gid1> <gid2> <gid3>             # Chain: gid1 → gid2 → gid3
 asana create "Task name"
 asana create "Task name" -p <project_gid>
 asana create "Task name" -p <gid> -a me -d 2026-03-15
+asana create "Task name" -p <gid> --start 2026-03-01 -d 2026-03-15  # Date range
 asana create "Task name" -n "Plain description"
 asana create "Task name" -n "## Rich description\n- bullet" -m
 asana create "Task name" -p <gid> --custom-fields '{"<field_gid>": "value"}'
@@ -105,6 +106,8 @@ asana update <gid> -c false             # Mark incomplete
 asana update <gid> -a me                # Assign to self
 asana update <gid> -a <user_gid>        # Assign to user
 asana update <gid> -d 2026-03-15        # Set due date
+asana update <gid> --start 2026-03-01 -d 2026-03-15  # Set date range
+asana update <gid> --start ""           # Clear start date
 
 # Comment
 asana comment <gid> "Comment text"
