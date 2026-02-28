@@ -301,7 +301,7 @@ class AsanaClient:
         params = {
             "opt_fields": "name,notes,html_notes,start_on,due_on,completed,assignee.name,projects.name,"
                           "custom_fields.name,custom_fields.display_value,tags.name,"
-                          "memberships.section.name,dependencies,dependents"
+                          "memberships.section.name,dependencies,dependents,num_subtasks"
         }
         result = self._request("GET", f"tasks/{task_gid}", params)
         return result.get("data", {})
@@ -995,6 +995,15 @@ def cmd_task(client: AsanaClient, args):
     if projects:
         print(f"Projects: {', '.join(p['name'] for p in projects)}")
 
+    num_subtasks = task.get("num_subtasks", 0)
+    if getattr(args, "subtasks", False) and num_subtasks > 0:
+        subtasks = client.get_subtasks(args.task_gid)
+        print(f"\nSubtasks ({num_subtasks}):")
+        for st in subtasks:
+            print(f"  {format_task(st, verbose=args.verbose)}")
+    elif num_subtasks > 0:
+        print(f"Subtasks: {num_subtasks} (use --subtasks to list)")
+
     if getattr(args, "markdown", False) and task.get("html_notes"):
         notes = asana_html_to_markdown(task["html_notes"])
     else:
@@ -1551,6 +1560,8 @@ Environment:
     task.add_argument("task_gid", help="Task GID")
     task.add_argument("-m", "--markdown", action="store_true",
                       help="Display description as markdown (converts from Asana rich text)")
+    task.add_argument("--subtasks", action="store_true",
+                      help="Include subtask list in output")
     task.set_defaults(func=cmd_task)
 
     # tasks
