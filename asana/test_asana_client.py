@@ -58,11 +58,11 @@ class TestClientInitialization:
     def test_init_no_token_raises(self):
         """Should raise AsanaAuthError if no token available."""
         with patch.dict(os.environ, {}, clear=True):
-            # Remove ASANA_ACCESS_TOKEN if present
             os.environ.pop("ASANA_ACCESS_TOKEN", None)
-            with pytest.raises(AsanaAuthError) as exc_info:
-                AsanaClient()
-            assert "No Asana token provided" in str(exc_info.value)
+            with patch.object(AsanaClient, "_load_oauth_token", return_value=None):
+                with pytest.raises(AsanaAuthError) as exc_info:
+                    AsanaClient()
+                assert "No Asana token provided" in str(exc_info.value)
 
     def test_init_with_workspace(self):
         """Should store workspace if provided."""
@@ -197,9 +197,10 @@ class TestWorkspaceOperations:
 
     @pytest.fixture
     def client(self):
-        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
-            client = AsanaClient()
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}, clear=False):
+            client = AsanaClient(token="test_token")
             client._session = MagicMock()
+            client._workspace = None
             return client
 
     def test_list_workspaces(self, client):
@@ -428,6 +429,34 @@ class TestTaskOperations:
         json_data = call_args.kwargs.get("json") or call_args[1].get("json")
         assert json_data["data"]["custom_fields"] == {"field1": "value1", "field2": "enum_gid"}
 
+    def test_create_task_with_date_range(self, client):
+        """Should create a task with start and due dates."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "data": {"gid": "new_task", "name": "Date Range Task"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.create_task(
+            name="Date Range Task",
+            project="proj1",
+            start_on="2026-03-01",
+            due_on="2026-03-15",
+        )
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] == "2026-03-01"
+        assert json_data["data"]["due_on"] == "2026-03-15"
+        assert result["gid"] == "new_task"
+
+    def test_create_task_start_without_due_raises(self, client):
+        """Should raise ValueError when start_on provided without due_on."""
+        with pytest.raises(ValueError, match="start_on requires due_on"):
+            client.create_task(name="Bad Task", start_on="2026-03-01")
+
     def test_create_task_with_section(self, client):
         """Should move task to section after creation."""
         # First call creates task, second moves to section
@@ -464,6 +493,39 @@ class TestTaskOperations:
 
         assert result["completed"] is True
         assert result["name"] == "Updated"
+
+    def test_update_task_with_start_on(self, client):
+        """Should update a task with start_on."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Task", "start_on": "2026-03-01", "due_on": "2026-03-15"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_task("task1", start_on="2026-03-01", due_on="2026-03-15")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] == "2026-03-01"
+        assert json_data["data"]["due_on"] == "2026-03-15"
+
+    def test_update_task_clear_start_on(self, client):
+        """Should clear start_on by passing empty string."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Task", "start_on": None}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_task("task1", start_on="")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] is None
 
     def test_update_task_no_changes(self, client):
         """Should raise error if no updates provided."""
@@ -1309,6 +1371,19 @@ class TestCLIIntegration:
         assert "[✓]" in result
         assert "Done Task" in result
 
+    def test_format_task_with_date_range(self):
+        """Should show date range when start_on is present."""
+        task = {"name": "Task", "start_on": "2026-03-01", "due_on": "2026-03-15", "completed": False, "assignee": None}
+        result = format_task(task)
+        assert "2026-03-01..2026-03-15" in result
+
+    def test_format_task_due_only(self):
+        """Should show just due date when no start_on."""
+        task = {"name": "Task", "due_on": "2026-03-15", "completed": False, "assignee": None}
+        result = format_task(task)
+        assert "2026-03-15" in result
+        assert ".." not in result
+
     def test_format_task_verbose(self):
         """Should include GID in verbose mode."""
         task = {"gid": "123456", "name": "Task", "due_on": None, "completed": False, "assignee": None}
@@ -1398,6 +1473,99 @@ class TestCLIIntegration:
         assert "task123" in captured.out
         assert "Bob" in captured.out
         assert "Project X" in captured.out
+
+    def test_cmd_task_shows_subtask_count(self, client, mock_args, capsys):
+        """Should show subtask count when subtasks exist."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = False
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Parent Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 3,
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtasks: 3" in captured.out
+        assert "--subtasks to list" in captured.out
+
+    def test_cmd_task_inline_subtasks(self, client, mock_args, capsys):
+        """Should list subtasks inline when --subtasks flag is set."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = True
+
+        task_response = Mock()
+        task_response.ok = True
+        task_response.status_code = 200
+        task_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Parent Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 2,
+            }
+        }
+
+        subtask_response = Mock()
+        subtask_response.ok = True
+        subtask_response.status_code = 200
+        subtask_response.json.return_value = {
+            "data": [
+                {"gid": "st1", "name": "Subtask A", "completed": False, "due_on": "2026-03-10", "assignee": {"name": "Alice"}},
+                {"gid": "st2", "name": "Subtask B", "completed": True, "due_on": None, "assignee": None},
+            ]
+        }
+
+        client._session.request.side_effect = [task_response, subtask_response]
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtasks (2):" in captured.out
+        assert "Subtask A" in captured.out
+        assert "Subtask B" in captured.out
+
+    def test_cmd_task_no_subtask_line_when_zero(self, client, mock_args, capsys):
+        """Should not show subtask line when there are none."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = False
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Simple Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 0,
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtask" not in captured.out
 
     def test_cmd_search(self, client, mock_args, capsys):
         """Should print search results."""
