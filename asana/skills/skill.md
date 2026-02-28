@@ -44,7 +44,8 @@ asana workspaces                        # List workspaces
 asana projects                          # List projects (add --archived for archived)
 asana projects -l 100                   # Limit results
 
-asana task <gid>                        # Full task details
+asana task <gid>                        # Full task details (shows subtask count if any)
+asana task <gid> --subtasks             # Include subtask list inline
 asana task <gid> -m                     # Display description as markdown (converts rich text)
 asana subtasks <gid>                    # List subtasks
 asana stories <gid>                     # Comments and activity

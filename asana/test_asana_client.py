@@ -1474,6 +1474,99 @@ class TestCLIIntegration:
         assert "Bob" in captured.out
         assert "Project X" in captured.out
 
+    def test_cmd_task_shows_subtask_count(self, client, mock_args, capsys):
+        """Should show subtask count when subtasks exist."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = False
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Parent Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 3,
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtasks: 3" in captured.out
+        assert "--subtasks to list" in captured.out
+
+    def test_cmd_task_inline_subtasks(self, client, mock_args, capsys):
+        """Should list subtasks inline when --subtasks flag is set."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = True
+
+        task_response = Mock()
+        task_response.ok = True
+        task_response.status_code = 200
+        task_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Parent Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 2,
+            }
+        }
+
+        subtask_response = Mock()
+        subtask_response.ok = True
+        subtask_response.status_code = 200
+        subtask_response.json.return_value = {
+            "data": [
+                {"gid": "st1", "name": "Subtask A", "completed": False, "due_on": "2026-03-10", "assignee": {"name": "Alice"}},
+                {"gid": "st2", "name": "Subtask B", "completed": True, "due_on": None, "assignee": None},
+            ]
+        }
+
+        client._session.request.side_effect = [task_response, subtask_response]
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtasks (2):" in captured.out
+        assert "Subtask A" in captured.out
+        assert "Subtask B" in captured.out
+
+    def test_cmd_task_no_subtask_line_when_zero(self, client, mock_args, capsys):
+        """Should not show subtask line when there are none."""
+        mock_args.task_gid = "task123"
+        mock_args.subtasks = False
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {
+                "gid": "task123",
+                "name": "Simple Task",
+                "completed": False,
+                "due_on": None,
+                "assignee": None,
+                "projects": [],
+                "notes": "",
+                "num_subtasks": 0,
+            }
+        }
+        client._session.request.return_value = mock_response
+
+        cmd_task(client, mock_args)
+        captured = capsys.readouterr()
+
+        assert "Subtask" not in captured.out
+
     def test_cmd_search(self, client, mock_args, capsys):
         """Should print search results."""
         mock_args.query = "bug"
