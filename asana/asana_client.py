@@ -299,7 +299,7 @@ class AsanaClient:
     def get_task(self, task_gid: str) -> Dict[str, Any]:
         """Get task details."""
         params = {
-            "opt_fields": "name,notes,html_notes,due_on,completed,assignee.name,projects.name,"
+            "opt_fields": "name,notes,html_notes,start_on,due_on,completed,assignee.name,projects.name,"
                           "custom_fields.name,custom_fields.display_value,tags.name,"
                           "memberships.section.name,dependencies,dependents"
         }
@@ -317,7 +317,7 @@ class AsanaClient:
     ) -> List[Dict[str, Any]]:
         """Get tasks from project, section, or by assignee."""
         params = {
-            "opt_fields": "name,due_on,completed,assignee.name,projects.name",
+            "opt_fields": "name,start_on,due_on,completed,assignee.name,projects.name",
             "limit": str(limit),
         }
 
@@ -356,7 +356,7 @@ class AsanaClient:
                            for Status=Triaged.
         """
         params = {
-            "opt_fields": "name,due_on,completed,assignee.name,projects.name",
+            "opt_fields": "name,start_on,due_on,completed,assignee.name,projects.name",
             "limit": str(min(limit, 100)),
             "sort_by": "modified_at",
             "sort_ascending": "false",
@@ -385,6 +385,7 @@ class AsanaClient:
         section: Optional[str] = None,
         assignee: Optional[str] = None,
         due_on: Optional[str] = None,
+        start_on: Optional[str] = None,
         notes: Optional[str] = None,
         html_notes: Optional[str] = None,
         custom_fields: Optional[Dict[str, Any]] = None,
@@ -399,6 +400,7 @@ class AsanaClient:
             section: Section GID to place task in (requires project)
             assignee: User GID or 'me' to assign the task
             due_on: Due date in YYYY-MM-DD format
+            start_on: Start date in YYYY-MM-DD format (requires due_on)
             notes: Plain text description
             html_notes: HTML description (use instead of notes, not both)
             custom_fields: Dict mapping custom field GIDs to values
@@ -409,7 +411,11 @@ class AsanaClient:
 
         Raises:
             AsanaAPIError: If the API request fails
+            ValueError: If start_on is provided without due_on
         """
+        if start_on and not due_on:
+            raise ValueError("start_on requires due_on (Asana API constraint)")
+
         data = {"name": name}
 
         if project:
@@ -418,6 +424,8 @@ class AsanaClient:
             data["assignee"] = assignee
         if due_on:
             data["due_on"] = due_on
+        if start_on:
+            data["start_on"] = start_on
         if notes:
             data["notes"] = notes
         if html_notes:
@@ -449,6 +457,7 @@ class AsanaClient:
         completed: Optional[bool] = None,
         assignee: Optional[str] = None,
         due_on: Optional[str] = None,
+        start_on: Optional[str] = None,
         notes: Optional[str] = None,
         html_notes: Optional[str] = None,
         custom_fields: Optional[Dict[str, Any]] = None,
@@ -464,6 +473,8 @@ class AsanaClient:
             data["assignee"] = assignee
         if due_on is not None:
             data["due_on"] = due_on
+        if start_on is not None:
+            data["start_on"] = start_on if start_on != "" else None
         if notes is not None:
             data["notes"] = notes
         if html_notes is not None:
@@ -486,7 +497,7 @@ class AsanaClient:
 
     def get_subtasks(self, task_gid: str) -> List[Dict[str, Any]]:
         """Get subtasks of a task."""
-        params = {"opt_fields": "name,completed,due_on,assignee.name"}
+        params = {"opt_fields": "name,completed,start_on,due_on,assignee.name"}
         result = self._request("GET", f"tasks/{task_gid}/subtasks", params)
         return result.get("data", [])
 
@@ -912,11 +923,13 @@ def format_count(count: int, limit: int, label: str = "tasks") -> str:
 def format_task(task: dict, verbose: bool = False) -> str:
     """Format task for display."""
     status = "✓" if task.get("completed") else " "
+    start = task.get("start_on") or ""
     due = task.get("due_on") or "-"
+    date_str = f"{start}..{due}" if start else due
     name = task.get("name", "Untitled")
     assignee = (task.get("assignee") or {}).get("name", "-")
 
-    line = f"[{status}] {due:<12} {assignee:<15} {name}"
+    line = f"[{status}] {date_str:<25} {assignee:<15} {name}"
 
     if verbose:
         gid = task.get("gid", "")
@@ -973,6 +986,8 @@ def cmd_task(client: AsanaClient, args):
     print(f"GID: {args.task_gid}")
     print(f"URL: https://app.asana.com/0/0/{args.task_gid}")
     print(f"Completed: {'Yes' if task.get('completed') else 'No'}")
+    if task.get("start_on"):
+        print(f"Start: {task.get('start_on')}")
     print(f"Due: {task.get('due_on') or 'None'}")
     print(f"Assignee: {(task.get('assignee') or {}).get('name', 'Unassigned')}")
 
@@ -1082,6 +1097,7 @@ def cmd_create(client: AsanaClient, args):
         project=args.project,
         assignee=args.assignee,
         due_on=args.due,
+        start_on=args.start,
         notes=notes,
         html_notes=html_notes,
         custom_fields=custom_fields,
@@ -1111,6 +1127,8 @@ def cmd_update(client: AsanaClient, args):
         updates["assignee"] = args.assignee
     if args.due:
         updates["due_on"] = args.due
+    if args.start is not None:
+        updates["start_on"] = args.start
     if args.notes:
         if args.markdown:
             updates["html_notes"] = markdown_to_asana_html(args.notes)
@@ -1569,6 +1587,7 @@ Environment:
     create.add_argument("-p", "--project", help="Project GID")
     create.add_argument("-a", "--assignee", help="Assignee (GID or 'me')")
     create.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
+    create.add_argument("--start", help="Start date (YYYY-MM-DD, requires --due)")
     create.add_argument("-n", "--notes", help="Description")
     create.add_argument("-m", "--markdown", nargs="?", const=True, default=False,
                         help="Convert notes from markdown to rich text. Optionally pass text: -m \"## body\"")
@@ -1581,7 +1600,8 @@ Environment:
     update.add_argument("--name", help="New name")
     update.add_argument("-c", "--completed", help="true/false")
     update.add_argument("-a", "--assignee", help="Assignee")
-    update.add_argument("-d", "--due", help="Due date")
+    update.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
+    update.add_argument("--start", help="Start date (YYYY-MM-DD, requires due date on task)")
     update.add_argument("-n", "--notes", help="Description/notes")
     update.add_argument("-m", "--markdown", nargs="?", const=True, default=False,
                         help="Convert notes from markdown to rich text. Optionally pass text: -m \"## body\"")

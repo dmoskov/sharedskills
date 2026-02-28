@@ -58,11 +58,11 @@ class TestClientInitialization:
     def test_init_no_token_raises(self):
         """Should raise AsanaAuthError if no token available."""
         with patch.dict(os.environ, {}, clear=True):
-            # Remove ASANA_ACCESS_TOKEN if present
             os.environ.pop("ASANA_ACCESS_TOKEN", None)
-            with pytest.raises(AsanaAuthError) as exc_info:
-                AsanaClient()
-            assert "No Asana token provided" in str(exc_info.value)
+            with patch.object(AsanaClient, "_load_oauth_token", return_value=None):
+                with pytest.raises(AsanaAuthError) as exc_info:
+                    AsanaClient()
+                assert "No Asana token provided" in str(exc_info.value)
 
     def test_init_with_workspace(self):
         """Should store workspace if provided."""
@@ -197,9 +197,10 @@ class TestWorkspaceOperations:
 
     @pytest.fixture
     def client(self):
-        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
-            client = AsanaClient()
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}, clear=False):
+            client = AsanaClient(token="test_token")
             client._session = MagicMock()
+            client._workspace = None
             return client
 
     def test_list_workspaces(self, client):
@@ -428,6 +429,34 @@ class TestTaskOperations:
         json_data = call_args.kwargs.get("json") or call_args[1].get("json")
         assert json_data["data"]["custom_fields"] == {"field1": "value1", "field2": "enum_gid"}
 
+    def test_create_task_with_date_range(self, client):
+        """Should create a task with start and due dates."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 201
+        mock_response.json.return_value = {
+            "data": {"gid": "new_task", "name": "Date Range Task"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.create_task(
+            name="Date Range Task",
+            project="proj1",
+            start_on="2026-03-01",
+            due_on="2026-03-15",
+        )
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] == "2026-03-01"
+        assert json_data["data"]["due_on"] == "2026-03-15"
+        assert result["gid"] == "new_task"
+
+    def test_create_task_start_without_due_raises(self, client):
+        """Should raise ValueError when start_on provided without due_on."""
+        with pytest.raises(ValueError, match="start_on requires due_on"):
+            client.create_task(name="Bad Task", start_on="2026-03-01")
+
     def test_create_task_with_section(self, client):
         """Should move task to section after creation."""
         # First call creates task, second moves to section
@@ -464,6 +493,39 @@ class TestTaskOperations:
 
         assert result["completed"] is True
         assert result["name"] == "Updated"
+
+    def test_update_task_with_start_on(self, client):
+        """Should update a task with start_on."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Task", "start_on": "2026-03-01", "due_on": "2026-03-15"}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_task("task1", start_on="2026-03-01", due_on="2026-03-15")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] == "2026-03-01"
+        assert json_data["data"]["due_on"] == "2026-03-15"
+
+    def test_update_task_clear_start_on(self, client):
+        """Should clear start_on by passing empty string."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": {"gid": "task1", "name": "Task", "start_on": None}
+        }
+        client._session.request.return_value = mock_response
+
+        result = client.update_task("task1", start_on="")
+
+        call_args = client._session.request.call_args
+        json_data = call_args.kwargs.get("json") or call_args[1].get("json")
+        assert json_data["data"]["start_on"] is None
 
     def test_update_task_no_changes(self, client):
         """Should raise error if no updates provided."""
@@ -1308,6 +1370,19 @@ class TestCLIIntegration:
         result = format_task(task)
         assert "[✓]" in result
         assert "Done Task" in result
+
+    def test_format_task_with_date_range(self):
+        """Should show date range when start_on is present."""
+        task = {"name": "Task", "start_on": "2026-03-01", "due_on": "2026-03-15", "completed": False, "assignee": None}
+        result = format_task(task)
+        assert "2026-03-01..2026-03-15" in result
+
+    def test_format_task_due_only(self):
+        """Should show just due date when no start_on."""
+        task = {"name": "Task", "due_on": "2026-03-15", "completed": False, "assignee": None}
+        result = format_task(task)
+        assert "2026-03-15" in result
+        assert ".." not in result
 
     def test_format_task_verbose(self):
         """Should include GID in verbose mode."""
