@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 # Add the maintenance scripts to path for imports
-SCAFFOLD_PATH = Path.home() / "Code" / os.environ.get("SCAFFOLD_REPO", "scaffold") / "claude-code-scaffold" / "scripts" / "maintenance"
+SCAFFOLD_PATH = Path(os.environ.get("SCAFFOLD_PATH", str(Path.home() / "scaffold" / "scripts" / "maintenance")))
 sys.path.insert(0, str(SCAFFOLD_PATH))
 
 # Try to import from the scaffold's memory system
@@ -90,8 +90,8 @@ class LettaClient:
                 print("<!-- Starting SSH tunnel for database connection -->", file=sys.stderr)
                 subprocess.run([
                     "ssh", "-fN",
-                    "-L", "5433:DB_HOST_PLACEHOLDER:5432",
-                    "-i", os.path.expanduser("~/.ssh/SSH_KEY_PLACEHOLDER"),
+                    "-L", f"5433:{os.environ.get('DB_HOST', 'localhost')}:5432",
+                    "-i", os.path.expanduser(os.environ.get("SSH_KEY_PATH", "~/.ssh/id_rsa")),
                     "ec2-user@54.177.62.161"
                 ], check=False, capture_output=True)
                 import time

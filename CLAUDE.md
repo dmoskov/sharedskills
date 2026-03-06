@@ -140,7 +140,7 @@ When working in any subdirectory:
 Project-specific CLAUDE.md files should include:
 ```markdown
 ## Universal Instructions
-See: your global CLAUDE.md for universal coding standards
+See your global CLAUDE.md for universal coding standards
 
 ## Project-Specific Instructions
 [Your project-specific content here]

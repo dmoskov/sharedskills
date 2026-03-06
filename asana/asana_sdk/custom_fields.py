@@ -76,7 +76,7 @@ def preload_custom_fields_cache(project_gid: str) -> Dict[str, Dict[str, str]]:
 
     Example:
         # At start of task creation loop
-        cache_data = preload_custom_fields_cache('ASANA_PROJECT_GID_PLACEHOLDER')
+        cache_data = preload_custom_fields_cache(os.environ.get('ASANA_PROJECT_GID', ''))
         print(f"Cached {len(cache_data['fields'])} fields")
 
         # Subsequent calls to get_custom_field_gid() will use the cache
