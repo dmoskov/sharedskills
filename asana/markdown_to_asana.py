@@ -32,6 +32,7 @@ Usage as CLI:
 """
 
 import html as html_module
+import re
 import sys
 from typing import Optional
 
@@ -46,6 +47,11 @@ def escape_html(text: str) -> str:
     return html_module.escape(text, quote=True)
 
 
+def strip_html_tags(text: str) -> str:
+    """Strip HTML tags from text, keeping inner content."""
+    return re.sub(r"<[^>]+>", "", text)
+
+
 class AsanaRenderer(mistune.HTMLRenderer):
     """
     Mistune HTML renderer customized for Asana's AsanaText format.
@@ -53,10 +59,6 @@ class AsanaRenderer(mistune.HTMLRenderer):
     Inherits from HTMLRenderer and overrides specific methods to match
     Asana's supported HTML subset.
     """
-
-    def __init__(self) -> None:
-        # escape=False because we handle escaping ourselves where needed
-        super().__init__(escape=False)
 
     # ========== Override for Asana-specific behavior ==========
 
@@ -114,6 +116,69 @@ class AsanaRenderer(mistune.HTMLRenderer):
         # Strip trailing newlines from list item content
         text = text.strip()
         return f"<li>{text}</li>"
+
+    # ========== Table rendering (plain-text, Asana has no <table> support) ==========
+
+    def __init__(self) -> None:
+        super().__init__(escape=False)
+        self._table_rows: list[list[str]] = []
+        self._table_header_row: list[str] = []
+        self._current_row: list[str] = []
+
+    def table(self, text: str) -> str:
+        """Render table as plain-text aligned columns."""
+        rows = self._table_rows
+        header = self._table_header_row
+
+        # Reset state
+        self._table_rows = []
+        self._table_header_row = []
+
+        if not header and not rows:
+            return text
+
+        all_rows = [header] + rows if header else rows
+
+        # Calculate column widths
+        col_count = max(len(r) for r in all_rows)
+        widths = [0] * col_count
+        for row in all_rows:
+            for i, cell in enumerate(row):
+                widths[i] = max(widths[i], len(cell))
+
+        def format_row(row):
+            cells = []
+            for i in range(col_count):
+                val = row[i] if i < len(row) else ""
+                cells.append(val.ljust(widths[i]))
+            return " | ".join(cells).rstrip()
+
+        lines = []
+        if header:
+            lines.append(format_row(header))
+            lines.append(" | ".join("-" * w for w in widths))
+        for row in rows:
+            lines.append(format_row(row))
+
+        return "\n".join(lines) + "\n\n"
+
+    def table_head(self, text: str) -> str:
+        self._table_header_row = self._current_row
+        self._current_row = []
+        return ""
+
+    def table_body(self, text: str) -> str:
+        return ""
+
+    def table_row(self, text: str) -> str:
+        self._table_rows.append(self._current_row)
+        self._current_row = []
+        return ""
+
+    def table_cell(self, text: str, align=None, head=False) -> str:
+        # Strip HTML tags since tables render as plain text
+        self._current_row.append(strip_html_tags(text).strip())
+        return ""
 
     # Disable features not supported by Asana
     def block_html(self, html: str) -> str:
