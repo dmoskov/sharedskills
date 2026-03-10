@@ -1,0 +1,571 @@
+/**
+ * Dashboard Responsive Enhancements
+ * Mobile-first responsive styles for dashboard pages
+ * Priority: Overview, Alerts, Trending Topics
+ */
+
+/* =============================================================================
+   BASE RESPONSIVE UTILITIES
+   ============================================================================= */
+
+/* Ensure viewport meta tag is set in HTML:
+   <meta name="viewport" content="width=device-width, initial-scale=1.0"> */
+
+/* Touch-friendly minimum tap target size (WCAG 2.1 AAA: 44x44px) */
+button,
+.button,
+.btn,
+.nav-link,
+.icon-btn,
+a.metric-card,
+.filter-tab,
+.control-btn {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+/* Ensure text is readable on mobile (minimum 16px to prevent zoom on iOS) */
+input,
+select,
+textarea {
+    font-size: 16px;
+}
+
+/* =============================================================================
+   DESKTOP NAVIGATION LAYOUT (>768px)
+   ============================================================================= */
+
+@media (min-width: 769px) {
+    /* Desktop Navigation - Full horizontal layout */
+    .nav-header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .nav-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 64px;
+        padding: 0 2rem;
+        gap: 2rem;
+    }
+
+    .nav-title {
+        flex-shrink: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--nav-active);
+    }
+
+    /* Desktop nav links - horizontal layout */
+    .nav-links {
+        display: flex !important;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1;
+        justify-content: flex-start;
+        height: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+    }
+
+    .nav-links::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+
+    .nav-link {
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 100%;
+        padding: 0 1rem;
+        color: var(--nav-text);
+        text-decoration: none;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        white-space: nowrap;
+        border-bottom: 2px solid transparent;
+        transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .nav-link:hover {
+        color: var(--nav-active);
+        background-color: var(--primary-light);
+    }
+
+    .nav-link.active {
+        color: var(--nav-active);
+        border-bottom-color: var(--nav-active);
+        font-weight: 600;
+    }
+
+    /* Hide mobile hamburger on desktop */
+    .nav-mobile-toggle {
+        display: none !important;
+    }
+
+    /* Connection status indicator positioning */
+    #ws-connection-status {
+        flex-shrink: 0;
+        margin-left: auto;
+    }
+}
+
+/* Desktop Large Screens (>1200px) - More spacing */
+@media (min-width: 1200px) {
+    .nav-container {
+        padding: 0 3rem;
+        gap: 3rem;
+    }
+
+    .nav-links {
+        gap: 1rem;
+    }
+
+    .nav-link {
+        padding: 0 1.5rem;
+        font-size: 1rem;
+    }
+}
+
+/* =============================================================================
+   SMOOTH MOBILE-DESKTOP TRANSITIONS
+   ============================================================================= */
+
+/* Smooth transitions for navigation elements across all breakpoints */
+.nav-header,
+.nav-container,
+.nav-title,
+.nav-links,
+.nav-link {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth layout transitions for responsive grids */
+.metrics-grid,
+.grid-2,
+.chart-grid,
+.analytics-grid {
+    transition: grid-template-columns 0.3s ease, gap 0.3s ease;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* =============================================================================
+   TABLET BREAKPOINT (768px)
+   ============================================================================= */
+
+@media (max-width: 768px) {
+
+    /* Layout Adjustments */
+    .container,
+    .dashboard-container,
+    .trend-container {
+        padding: 12px !important;
+        margin: 0 !important;
+    }
+
+    .nav-container {
+        padding: 0 1rem !important;
+    }
+
+    /* Hide desktop navigation, show mobile hamburger */
+    .nav-links {
+        display: none !important;
+    }
+
+    .nav-mobile-toggle {
+        display: flex !important;
+    }
+
+    /* Grid Layouts - Stack Vertically */
+    .metrics-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+    }
+
+    .grid-2,
+    .chart-grid,
+    .analytics-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+
+    /* Metric Cards */
+    .metric-card {
+        padding: 16px !important;
+        min-height: 100px !important;
+    }
+
+    .metric-value {
+        font-size: 28px !important;
+    }
+
+    .metric-label {
+        font-size: 13px !important;
+    }
+
+    /* Controls - Stack Vertically */
+    .controls,
+    .controls-row,
+    .comparison-controls,
+    .filter-controls {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .control-group,
+    .comparison-control-group {
+        width: 100% !important;
+    }
+
+    select,
+    input[type="text"],
+    input[type="date"],
+    button {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Charts - Full Width */
+    .chart-container {
+        width: 100% !important;
+        height: 250px !important;
+        overflow-x: auto !important;
+    }
+
+    .chart-container canvas {
+        max-width: 100% !important;
+    }
+
+    /* Tables - Horizontal Scroll */
+    table {
+        display: block !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        white-space: nowrap !important;
+    }
+
+    /* Reduce font sizes */
+    .section-title,
+    .chart-title {
+        font-size: 18px !important;
+    }
+
+    h1 {
+        font-size: 24px !important;
+    }
+
+    h2 {
+        font-size: 20px !important;
+    }
+
+    h3 {
+        font-size: 16px !important;
+    }
+
+    /* Sidebar adjustments */
+    .nav-sidebar {
+        width: 100% !important;
+        max-width: 300px !important;
+    }
+
+    body.has-sidebar .dashboard-container,
+    body.has-sidebar .container {
+        margin-left: 0 !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+}
+
+/* =============================================================================
+   MOBILE BREAKPOINT (480px)
+   ============================================================================= */
+
+@media (max-width: 480px) {
+
+    /* Even tighter spacing */
+    .container,
+    .dashboard-container,
+    .trend-container {
+        padding: 8px !important;
+    }
+
+    /* Single column for all grids */
+    .metrics-grid {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+    }
+
+    .metric-card {
+        padding: 12px !important;
+        min-height: 80px !important;
+    }
+
+    .metric-value {
+        font-size: 24px !important;
+    }
+
+    .metric-label {
+        font-size: 12px !important;
+    }
+
+    /* Navigation title smaller */
+    .nav-title {
+        font-size: 16px !important;
+    }
+
+    /* Button groups stack */
+    .button-group,
+    .action-buttons,
+    .share-actions {
+        flex-direction: column !important;
+        width: 100% !important;
+    }
+
+    button,
+    .button,
+    .btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    /* Charts smaller on phone */
+    .chart-container {
+        height: 200px !important;
+    }
+
+    /* Smaller section titles */
+    .section-title,
+    .chart-title {
+        font-size: 16px !important;
+        margin-bottom: 8px !important;
+    }
+
+    /* Compact padding */
+    .card,
+    .content-card {
+        padding: 12px !important;
+    }
+
+    /* Hide less critical UI elements on very small screens */
+    .desktop-only {
+        display: none !important;
+    }
+}
+
+/* =============================================================================
+   OVERVIEW PAGE SPECIFIC
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    /* System health grid */
+    #overview-metrics-grid,
+    .overview .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* Activity charts */
+    #overview-activity-chart,
+    #overview-topics-chart {
+        max-height: 250px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Single column on phone */
+    #overview-metrics-grid,
+    .overview .metrics-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* =============================================================================
+   TREND ANALYSIS PAGE SPECIFIC
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    .trend-container {
+        padding: 12px !important;
+    }
+
+    .controls-row {
+        flex-direction: column !important;
+        padding: 12px !important;
+    }
+
+    .control-group {
+        width: 100% !important;
+    }
+
+    .control-group label {
+        font-size: 12px !important;
+    }
+
+    .control-group select,
+    .control-group input {
+        width: 100% !important;
+    }
+}
+
+/* =============================================================================
+   ALERTS PAGE (DESKTOP VERSION)
+   Note: Mobile alerts page already has dedicated mobile CSS
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    .alert-list {
+        padding: 8px !important;
+    }
+
+    .alert-card {
+        margin-bottom: 12px !important;
+    }
+
+    .alert-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+    }
+
+    .alert-actions {
+        width: 100% !important;
+        margin-top: 8px !important;
+    }
+}
+
+/* =============================================================================
+   TOUCH OPTIMIZATIONS
+   ============================================================================= */
+
+@media (hover: none) and (pointer: coarse) {
+    /* Remove hover states on touch devices */
+    .metric-card:hover,
+    .button:hover,
+    .nav-link:hover {
+        transform: none !important;
+    }
+
+    /* Larger tap targets */
+    button,
+    .button,
+    a {
+        padding: 12px 16px !important;
+    }
+
+    /* Prevent text selection on interactive elements */
+    .metric-card,
+    .button,
+    button {
+        -webkit-user-select: none !important;
+        user-select: none !important;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+    }
+}
+
+/* =============================================================================
+   LANDSCAPE ORIENTATION (PHONE)
+   ============================================================================= */
+
+@media screen and (orientation: landscape) and (max-height: 500px) {
+    /* Reduce vertical spacing in landscape */
+    .metric-card {
+        padding: 8px 12px !important;
+        min-height: 60px !important;
+    }
+
+    .chart-container {
+        height: 150px !important;
+    }
+
+    .nav-header {
+        margin-bottom: 1rem !important;
+    }
+
+    .section-title {
+        margin-bottom: 8px !important;
+        margin-top: 8px !important;
+    }
+}
+
+/* =============================================================================
+   PRINT STYLES
+   ============================================================================= */
+
+@media print {
+    /* Hide navigation and interactive elements */
+    .nav-header,
+    .nav-sidebar,
+    .controls,
+    button,
+    .hamburger-menu {
+        display: none !important;
+    }
+
+    /* Full width for content */
+    .container,
+    .dashboard-container {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Expand all grids to 2 columns for print */
+    .metrics-grid,
+    .grid-2 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* Remove shadows and borders */
+    .metric-card,
+    .chart-container {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+}
+
+/* =============================================================================
+   ACCESSIBILITY - HIGH CONTRAST MODE
+   ============================================================================= */
+
+@media (prefers-contrast: high) {
+    .metric-card,
+    button,
+    .nav-link {
+        border: 2px solid currentColor !important;
+    }
+
+    .metric-value {
+        font-weight: 700 !important;
+    }
+}
+
+/* =============================================================================
+   SAFE AREA INSETS (iPhone X+ notch support)
+   ============================================================================= */
+
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(0px, env(safe-area-inset-left)) !important;
+        padding-right: max(0px, env(safe-area-inset-right)) !important;
+    }
+
+    .nav-header {
+        padding-left: max(1rem, env(safe-area-inset-left)) !important;
+        padding-right: max(1rem, env(safe-area-inset-right)) !important;
+    }
+}
