@@ -21,6 +21,7 @@ Based on patterns we've successfully applied across our projects.
 | [git-hygiene](git-hygiene.md) | Clean stale branches, fix .gitignore, remove large files | Monthly |
 | [pin-dependencies](pin-dependencies.md) | Lock versions to prevent surprise breaks | Monthly |
 | [security-scan](security-scan.md) | Find hardcoded secrets and insecure defaults | Monthly |
+| [test-driven-development](test-driven-development.md) | Write failing tests first, commit, then implement | Per feature |
 
 ## Scheduling
 
