@@ -1349,9 +1349,11 @@ def cmd_dep(client: AsanaClient, args):
     """Show, add, or remove task dependencies."""
     action = getattr(args, "dep_action", None)
 
-    if action is None:
-        # Show dependencies and dependents for the task
-        task_gid = args.task_gid
+    if action in (None, "show"):
+        task_gid = getattr(args, "task_gid", None)
+        if not task_gid:
+            print("Error: task GID required (usage: asana dep <task_gid>)", file=sys.stderr)
+            sys.exit(2)
         dependencies = client.get_dependencies(task_gid)
         dependents = client.get_dependents(task_gid)
 
@@ -1832,27 +1834,29 @@ Environment:
     # dep (dependencies)
     dep = subparsers.add_parser("dep", help="Show/manage task dependencies")
     dep_sub = dep.add_subparsers(dest="dep_action")
-
-    # dep <task_gid> (show)
-    dep.add_argument("task_gid", help="Task GID")
     dep.set_defaults(func=cmd_dep)
+
+    # dep show <task_gid> — explicit subcommand. Bare `asana dep <gid>` is rewritten to this in main().
+    dep_show = dep_sub.add_parser("show", help="Show dependencies for a task")
+    dep_show.add_argument("task_gid", help="Task GID")
+    dep_show.set_defaults(func=cmd_dep, dep_action="show")
 
     # dep add <task_gid> --blocked-by/--blocks
     dep_add = dep_sub.add_parser("add", help="Add dependency")
     dep_add.add_argument("task_gid", help="Task GID")
-    dep_add.add_argument("--blocked-by", nargs="+", metavar="GID",
-                         help="Task GIDs that block this task")
-    dep_add.add_argument("--blocks", nargs="+", metavar="GID",
-                         help="Task GIDs that this task blocks")
+    dep_add.add_argument("--blocked-by", action="append", metavar="GID",
+                         help="Task GID that blocks this task (repeat for multiple)")
+    dep_add.add_argument("--blocks", action="append", metavar="GID",
+                         help="Task GID that this task blocks (repeat for multiple)")
     dep_add.set_defaults(func=cmd_dep, dep_action="add")
 
     # dep rm <task_gid> --blocked-by/--blocks
     dep_rm = dep_sub.add_parser("rm", help="Remove dependency")
     dep_rm.add_argument("task_gid", help="Task GID")
-    dep_rm.add_argument("--blocked-by", nargs="+", metavar="GID",
-                        help="Remove blockers from this task")
-    dep_rm.add_argument("--blocks", nargs="+", metavar="GID",
-                        help="Remove tasks this task blocks")
+    dep_rm.add_argument("--blocked-by", action="append", metavar="GID",
+                        help="Remove a blocker from this task (repeat for multiple)")
+    dep_rm.add_argument("--blocks", action="append", metavar="GID",
+                        help="Remove a task this task blocks (repeat for multiple)")
     dep_rm.set_defaults(func=cmd_dep, dep_action="rm")
 
     # dep chain <gid1> <gid2> ...
@@ -1951,6 +1955,13 @@ Environment:
     global_flags = {"--json", "-v", "--verbose"}
     hoisted = [a for a in raw_args if a in global_flags]
     rest = [a for a in raw_args if a not in global_flags]
+
+    # Backwards compat: rewrite `dep <gid>` -> `dep show <gid>` so the bare
+    # show form keeps working alongside `dep add/rm/chain` subcommands.
+    _dep_subs = {"show", "add", "rm", "chain", "-h", "--help"}
+    if len(rest) >= 2 and rest[0] == "dep" and rest[1] not in _dep_subs:
+        rest = [rest[0], "show"] + rest[1:]
+
     args = parser.parse_args(hoisted + rest)
 
     # Show help if no command
