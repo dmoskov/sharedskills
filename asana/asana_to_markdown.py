@@ -14,6 +14,7 @@ Handles Asana's supported HTML subset:
 - <pre> → ```code block```
 - <a href="url"> → [text](url)
 - <ul>/<ol> + <li> → - item / 1. item
+- <table>/<tr>/<td> → GFM markdown table (first row treated as header)
 - <hr> → ---
 - <blockquote> → > quote
 
@@ -41,6 +42,10 @@ class AsanaToMarkdownConverter(HTMLParser):
         self.list_stack = []  # Track nested list types: 'ul' or 'ol'
         self.ol_counters = []  # Track ordered list item numbers
         self.in_pre = False
+        self.in_table = False
+        self.table_rows = []   # Rows collected for the current <table>
+        self.current_row = []  # Cells collected for the current <tr>
+        self.output_stack = []  # Saved output buffers while capturing a cell
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -87,6 +92,16 @@ class AsanaToMarkdownConverter(HTMLParser):
             self.output.append("> ")
         elif tag == "br":
             self.output.append("\n")
+        elif tag == "table":
+            self.in_table = True
+            self.table_rows = []
+        elif tag == "tr":
+            self.current_row = []
+        elif tag in ("td", "th"):
+            # Capture cell content into a fresh buffer so inline formatting
+            # (bold, links, code) is preserved, then collect it on the end tag.
+            self.output_stack.append(self.output)
+            self.output = []
 
     def handle_endtag(self, tag):
         tag = tag.lower()
@@ -133,6 +148,18 @@ class AsanaToMarkdownConverter(HTMLParser):
             self.output.append("\n")
         elif tag == "p":
             self.output.append("\n\n")
+        elif tag in ("td", "th"):
+            cell = "".join(self.output).strip().replace("\n", " ").replace("|", "\\|")
+            if self.output_stack:
+                self.output = self.output_stack.pop()
+            self.current_row.append(cell)
+        elif tag == "tr":
+            self.table_rows.append(self.current_row)
+            self.current_row = []
+        elif tag == "table":
+            self._emit_table()
+            self.in_table = False
+            self.table_rows = []
 
         # Pop matching tag from stack
         for i in range(len(self.tag_stack) - 1, -1, -1):
@@ -140,7 +167,25 @@ class AsanaToMarkdownConverter(HTMLParser):
                 self.tag_stack.pop(i)
                 break
 
+    def _emit_table(self):
+        """Render collected rows as a GFM markdown table (first row = header)."""
+        rows = [r for r in self.table_rows if r]
+        if not rows:
+            return
+        ncols = max(len(r) for r in rows)
+
+        def fmt(row):
+            cells = list(row) + [""] * (ncols - len(row))
+            return "| " + " | ".join(cells) + " |"
+
+        lines = [fmt(rows[0]), "| " + " | ".join(["---"] * ncols) + " |"]
+        lines.extend(fmt(r) for r in rows[1:])
+        self.output.append("\n" + "\n".join(lines) + "\n\n")
+
     def handle_data(self, data):
+        # Drop whitespace that sits between table cells/rows (outside any cell).
+        if self.in_table and not self.output_stack:
+            return
         self.output.append(data)
 
     def handle_entityref(self, name):

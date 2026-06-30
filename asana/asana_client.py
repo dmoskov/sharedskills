@@ -1187,8 +1187,12 @@ def cmd_create(client: AsanaClient, args):
 
     recurrence = json.loads(args.recurrence_json) if args.recurrence_json else None
 
+    parent = getattr(args, "parent", None)
+
     task = client.create_task(
         name=args.name,
+        # Subtasks belong under the parent, not in the project. Only pass
+        # --project for a subtask when the user explicitly asked for both.
         project=args.project,
         assignee=args.assignee,
         due_on=args.due,
@@ -1198,12 +1202,19 @@ def cmd_create(client: AsanaClient, args):
         custom_fields=custom_fields,
         recurrence=recurrence,
     )
+
+    if parent:
+        client.set_parent(task["gid"], parent)
+
     if args.json:
         print(json.dumps(task, indent=2))
         return
 
     print(f"Created: {task.get('name')}")
     print(f"GID: {task.get('gid')}")
+    if parent:
+        in_project = " (also added to project)" if args.project else ""
+        print(f"Subtask of: {parent}{in_project}")
     print(f"URL: https://app.asana.com/0/0/{task.get('gid')}")
 
 
@@ -1709,6 +1720,7 @@ Examples:
   asana search "query"          Search tasks
   asana my-tasks -i             My incomplete tasks
   asana create "Name" -p <gid>  Create task in project
+  asana create "Sub" --parent <gid>   Create a subtask (not added to a project)
   asana update <gid> -c true    Mark task complete
   asana comment <gid> "text"    Add comment to task
   asana move <gid> -s <section> Move task to section
@@ -1783,6 +1795,11 @@ Environment:
     create = subparsers.add_parser("create", help="Create task")
     create.add_argument("name", help="Task name")
     create.add_argument("-p", "--project", help="Project GID")
+    create.add_argument("--parent", help=(
+        "Parent task GID — creates this as a subtask under it. Subtasks are "
+        "NOT added to the parent's project; only pass --project too if you "
+        "explicitly want the subtask listed in a project."
+    ))
     create.add_argument("-a", "--assignee", help="Assignee (GID or 'me')")
     create.add_argument("-d", "--due", help="Due date (YYYY-MM-DD)")
     create.add_argument("--start", help="Start date (YYYY-MM-DD, requires --due)")

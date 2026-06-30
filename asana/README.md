@@ -118,6 +118,7 @@ asana my-tasks -i
 | Command | Description |
 |---------|-------------|
 | `create <name>` | Create a task |
+| `create <name> --parent <gid>` | Create a subtask (not added to a project) |
 | `update <gid> [options]` | Update a task |
 | `comment <gid> <text>` | Add comment to task |
 

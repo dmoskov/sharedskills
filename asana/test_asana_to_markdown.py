@@ -193,6 +193,52 @@ class TestEntities:
         assert "\u2019 curly" in result
 
 
+class TestTables:
+    def test_basic_table(self):
+        html = (
+            "<body><table>"
+            "<tr><td>Name</td><td>Age</td></tr>"
+            "<tr><td>Bob</td><td>30</td></tr>"
+            "</table></body>"
+        )
+        result = asana_html_to_markdown(html)
+        assert result == "| Name | Age |\n| --- | --- |\n| Bob | 30 |"
+
+    def test_table_ignores_asana_cell_attributes(self):
+        # Asana echoes width/data-cell-widths on every <td>; ignore them.
+        html = (
+            '<body><table>'
+            '<tr><td width="120" data-cell-widths="120">A</td>'
+            '<td width="120" data-cell-widths="120">B</td></tr>'
+            '<tr><td width="120" data-cell-widths="120">1</td>'
+            '<td width="120" data-cell-widths="120">2</td></tr>'
+            '</table></body>'
+        )
+        result = asana_html_to_markdown(html)
+        assert result == "| A | B |\n| --- | --- |\n| 1 | 2 |"
+
+    def test_table_cell_inline_formatting(self):
+        html = (
+            "<body><table>"
+            "<tr><td><strong>H</strong></td></tr>"
+            '<tr><td><a href="https://app.asana.com/0/0/1">y</a></td></tr>'
+            "</table></body>"
+        )
+        result = asana_html_to_markdown(html)
+        assert result == (
+            "| **H** |\n| --- |\n| [y](https://app.asana.com/0/0/1) |"
+        )
+
+    def test_table_among_paragraphs(self):
+        html = (
+            "<body>Intro<table><tr><td>H</td></tr>"
+            "<tr><td>a</td></tr></table>Outro</body>"
+        )
+        result = asana_html_to_markdown(html)
+        assert "Intro" in result and "Outro" in result
+        assert "| H |\n| --- |\n| a |" in result
+
+
 class TestEdgeCases:
     def test_empty_string(self):
         assert asana_html_to_markdown("") == ""

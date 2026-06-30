@@ -98,6 +98,10 @@ asana create "Task name" -n "Plain description"
 asana create "Task name" -n "## Rich description\n- bullet"    # markdown by default
 asana create "Task name" -p <gid> --custom-fields '{"<field_gid>": "value"}'
 
+# Create a subtask (NOT added to the parent's project — see note below)
+asana create "Subtask name" --parent <parent_gid>
+asana create "Subtask name" --parent <parent_gid> -a me -d 2026-03-15
+
 # Update task
 asana update <gid> --name "New name"
 asana update <gid> -n "New description"                       # markdown by default
@@ -130,6 +134,18 @@ asana set-parent <gid> -p none                        # Remove parent
 # Remove associations
 asana remove <gid> -p <project_gid>    # Remove task from project
 asana remove <gid> -t <tag_gid>        # Remove tag from task
+```
+
+**Subtasks and projects:** When building a task with subtasks, add **only the
+parent** to the project. Create each subtask with `--parent <parent_gid>` and
+**no** `-p/--project` — subtasks live under their parent and should not clutter
+the project's task list. Only pass `--project` on a subtask if the user
+explicitly wants it to also appear in a project.
+
+```bash
+parent=$(asana --json create "Ship feature" -p <project_gid> | jq -r .gid)
+asana create "Write tests" --parent "$parent"   # subtask only, not in project
+asana create "Update docs"  --parent "$parent"
 ```
 
 ### Goals
@@ -191,9 +207,19 @@ These markdown features are converted to Asana rich text by default:
 - `**bold**`, `*italic*`, `~~strikethrough~~`
 - `` `inline code` `` and fenced code blocks
 - `- unordered` and `1. ordered` lists
-- `[text](url)` links
+- `[text](url)` links **and bare URLs** (auto-linked)
+- GFM pipe tables → real Asana tables (header row bolded; Asana has no `<th>`)
 - `> blockquotes`
 - `---` horizontal rules
+
+**Rich Asana links:** Any link to an `app.asana.com` URL — whether `[text](url)`
+or a bare pasted URL — is auto-resolved by Asana into a rich object chip showing
+the live task/project name. Just include the URL; no special syntax needed.
+
+```bash
+asana update <gid> -n "Blocked by https://app.asana.com/0/0/<task_gid>"
+asana create "Report" -n "| Metric | Value |\n| --- | --- |\n| Users | 1.2k |"
+```
 
 ## Task Recurrence
 
@@ -216,6 +242,7 @@ Caveats:
 1. **Not using `-v` when GIDs are needed** → Default output omits GIDs for readability. Use `-v` to see them for follow-up commands.
 2. **Using `--plain` when markdown is intended** → Only use `--plain` when you explicitly want literal text without rich formatting.
 3. **Setting recurrence without a due date** → Always pair `--recurrence-json` with `-d`/`--due` on create.
+4. **Adding subtasks to the project** → Use `--parent` (not `-p/--project`) for subtasks. Only the parent task belongs in the project; subtasks live under it.
 
 ## Project Configuration
 

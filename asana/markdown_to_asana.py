@@ -13,7 +13,9 @@ Supported markdown features:
 - Strikethrough: ~~text~~
 - Inline code: `code`
 - Code blocks: ```code```
-- Links: [text](url)
+- Links: [text](url) and bare URLs (autolinked; Asana resolves app.asana.com
+  links into rich object chips)
+- Tables: GFM pipe tables -> <table> (header row bolded; Asana has no <th>)
 - Unordered lists: - item or * item
 - Ordered lists: 1. item
 - Blockquotes: > quote
@@ -32,7 +34,6 @@ Usage as CLI:
 """
 
 import html as html_module
-import re
 import sys
 from typing import Optional
 
@@ -45,11 +46,6 @@ except ImportError:
 def escape_html(text: str) -> str:
     """Escape HTML special characters."""
     return html_module.escape(text, quote=True)
-
-
-def strip_html_tags(text: str) -> str:
-    """Strip HTML tags from text, keeping inner content."""
-    return re.sub(r"<[^>]+>", "", text)
 
 
 class AsanaRenderer(mistune.HTMLRenderer):
@@ -117,7 +113,10 @@ class AsanaRenderer(mistune.HTMLRenderer):
         text = text.strip()
         return f"<li>{text}</li>"
 
-    # ========== Table rendering (plain-text, Asana has no <table> support) ==========
+    # ========== Table rendering ==========
+    # Asana's docs claim <table> is "project briefs only", but tasks accept it
+    # too (verified against the live API). Header cells must be <td> — <th>
+    # returns "XML is invalid" — so the header row is bolded instead.
 
     def __init__(self) -> None:
         super().__init__(escape=False)
@@ -126,7 +125,7 @@ class AsanaRenderer(mistune.HTMLRenderer):
         self._current_row: list[str] = []
 
     def table(self, text: str) -> str:
-        """Render table as plain-text aligned columns."""
+        """Render a real Asana <table>; header row bolded (no <th> support)."""
         rows = self._table_rows
         header = self._table_header_row
 
@@ -137,30 +136,19 @@ class AsanaRenderer(mistune.HTMLRenderer):
         if not header and not rows:
             return text
 
-        all_rows = [header] + rows if header else rows
-
-        # Calculate column widths
-        col_count = max(len(r) for r in all_rows)
-        widths = [0] * col_count
-        for row in all_rows:
-            for i, cell in enumerate(row):
-                widths[i] = max(widths[i], len(cell))
-
-        def format_row(row):
-            cells = []
-            for i in range(col_count):
-                val = row[i] if i < len(row) else ""
-                cells.append(val.ljust(widths[i]))
-            return " | ".join(cells).rstrip()
-
-        lines = []
+        parts = ["<table>"]
         if header:
-            lines.append(format_row(header))
-            lines.append(" | ".join("-" * w for w in widths))
+            cells = "".join(
+                f"<td><strong>{c}</strong></td>" if c else "<td></td>"
+                for c in header
+            )
+            parts.append(f"<tr>{cells}</tr>")
         for row in rows:
-            lines.append(format_row(row))
+            cells = "".join(f"<td>{c}</td>" for c in row)
+            parts.append(f"<tr>{cells}</tr>")
+        parts.append("</table>")
 
-        return "\n".join(lines) + "\n\n"
+        return "".join(parts) + "\n\n"
 
     def table_head(self, text: str) -> str:
         self._table_header_row = self._current_row
@@ -176,8 +164,8 @@ class AsanaRenderer(mistune.HTMLRenderer):
         return ""
 
     def table_cell(self, text: str, align=None, head=False) -> str:
-        # Strip HTML tags since tables render as plain text
-        self._current_row.append(strip_html_tags(text).strip())
+        # Keep inline HTML (bold, links, code) — Asana renders it inside cells.
+        self._current_row.append(text.strip())
         return ""
 
     # Disable features not supported by Asana
@@ -201,7 +189,9 @@ def _create_markdown_parser():
     renderer = AsanaRenderer()
     md = mistune.create_markdown(
         renderer=renderer,
-        plugins=["strikethrough", "table"],
+        # "url" autolinks bare URLs so Asana can resolve app.asana.com links
+        # into rich object chips (it upgrades any <a> with an Asana href).
+        plugins=["strikethrough", "table", "url"],
     )
     return md
 
