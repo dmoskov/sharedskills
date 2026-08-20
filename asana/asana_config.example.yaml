@@ -1,0 +1,302 @@
+# Asana Configuration Example
+#
+# This file demonstrates how to configure the Asana CLI and client for your workspace.
+# Copy this file to one of these locations:
+#   - ~/.config/ai-dev-tools/asana_config.yaml (default)
+#   - Any path specified via ASANA_CONFIG_PATH environment variable
+#
+# All GIDs (Global IDs) are unique to your Asana workspace and must be obtained from your workspace.
+# Validate your config with: python3 asana_config_loader.py validate
+# Inspect the loaded config with: python3 asana_config_loader.py dump
+
+# ============================================================================
+# WORKSPACE CONFIGURATION
+# ============================================================================
+workspace:
+  # Your Asana workspace GID
+  # How to find: Run `python3 asana_client.py workspaces` to list all workspaces you have access to
+  # Replace YOUR_WORKSPACE_GID_HERE with the GID from that command
+  gid: "YOUR_WORKSPACE_GID_HERE"
+
+  # Your main task queue/project GID (where new tasks are created by default)
+  # How to find: Run `python3 asana_client.py projects --workspace YOUR_WORKSPACE_GID`
+  # Replace YOUR_DEFAULT_PROJECT_GID_HERE with the GID of your main project/task queue
+  default_project_gid: "YOUR_DEFAULT_PROJECT_GID_HERE"
+
+# ============================================================================
+# CUSTOM FIELDS
+# ============================================================================
+# Custom field GIDs from your Asana project
+# How to find: Run `python3 setup_asana_custom_fields.py --discover --project YOUR_PROJECT_GID`
+# This will list all custom fields and their GIDs
+#
+# NOTE: You may not need all these fields. Start with the core fields (project, priority, task_type)
+# and add others as needed for your workflow.
+custom_fields:
+  # Core fields - Most common fields you'll want to set
+  project: "YOUR_PROJECT_FIELD_GID_HERE"              # Enum - Project selector custom field
+  priority: "YOUR_PRIORITY_FIELD_GID_HERE"            # Enum - P0, P1, P2, P3
+  task_type: "YOUR_TASK_TYPE_FIELD_GID_HERE"          # Enum - Bug, Feature, Security, etc.
+  effort_estimate: "YOUR_EFFORT_FIELD_GID_HERE"       # Enum - S, M, L, XL
+
+  # Status tracking - Optional fields for tracking task lifecycle
+  validation_status: "YOUR_VALIDATION_STATUS_FIELD_GID_HERE"    # Enum - Approved, Needs Review, etc.
+  execution_status: "YOUR_EXECUTION_STATUS_FIELD_GID_HERE"      # Enum - Pending, In Progress, Completed, etc.
+  execution_location: "YOUR_EXECUTION_LOCATION_FIELD_GID_HERE"  # Enum - Local or Remote
+
+  # Dates - Optional date tracking fields
+  date_generated: "YOUR_DATE_GENERATED_FIELD_GID_HERE"       # Date - When task was created
+  last_seen: "YOUR_LAST_SEEN_FIELD_GID_HERE"                 # Date - Last time task was seen/updated
+
+  # Agent tracking - Optional if you're using automated agents
+  source_agent: "YOUR_SOURCE_AGENT_FIELD_GID_HERE"           # Multi-enum - Which agents generated this
+
+  # Metrics - Optional numeric fields for tracking
+  execution_duration: "YOUR_EXECUTION_DURATION_FIELD_GID_HERE"   # Number - Duration in seconds
+  agent_executions: "YOUR_AGENT_EXECUTIONS_FIELD_GID_HERE"       # Number - Count of agent runs
+  analysis_cost: "YOUR_ANALYSIS_COST_FIELD_GID_HERE"             # Number - USD cost of analysis
+  execution_cost: "YOUR_EXECUTION_COST_FIELD_GID_HERE"           # Number - USD cost of execution
+  verification_failures: "YOUR_VERIFICATION_FAILURES_FIELD_GID_HERE" # Number - Count of verification failures
+
+  # Text fields - Optional text tracking fields
+  orchestration_id: "YOUR_ORCHESTRATION_ID_FIELD_GID_HERE"       # Text - Unique execution ID
+  completion_notes: "YOUR_COMPLETION_NOTES_FIELD_GID_HERE"       # Text - Notes about completion
+
+# ============================================================================
+# ENUM OPTIONS
+# ============================================================================
+# Enum option GIDs for custom fields
+# These are the specific values that can be set for enum-type custom fields
+#
+# How to find: Use the discover command mentioned above, or manually inspect the custom field
+# in Asana's web UI to see the available options, then use the API to get their GIDs:
+# `python3 asana_client.py custom-field YOUR_FIELD_GID`
+#
+# NOTE: You'll need to create these enum options in your Asana project first if they don't exist.
+# The names can be customized to match your team's workflow.
+
+enum_options:
+  # Project options - Map project names to their enum option GIDs
+  # These should match the projects you work on
+  project:
+    your-project-name-1: "YOUR_PROJECT_1_ENUM_OPTION_GID_HERE"
+    your-project-name-2: "YOUR_PROJECT_2_ENUM_OPTION_GID_HERE"
+    your-project-name-3: "YOUR_PROJECT_3_ENUM_OPTION_GID_HERE"
+    # Add more projects as needed
+
+  # Priority levels - Standard priority levels
+  priority:
+    P0: "YOUR_P0_ENUM_OPTION_GID_HERE"   # Critical
+    P1: "YOUR_P1_ENUM_OPTION_GID_HERE"   # High
+    P2: "YOUR_P2_ENUM_OPTION_GID_HERE"   # Medium
+    P3: "YOUR_P3_ENUM_OPTION_GID_HERE"   # Low
+
+  # Task types - Types of work your team does
+  # Note: Emojis are optional but help with visual scanning in Asana
+  task_type:
+    "🔒 Security": "YOUR_SECURITY_TYPE_ENUM_OPTION_GID_HERE"
+    "🏗️ Architecture": "YOUR_ARCHITECTURE_TYPE_ENUM_OPTION_GID_HERE"
+    "⚡ Performance": "YOUR_PERFORMANCE_TYPE_ENUM_OPTION_GID_HERE"
+    "♻️ Refactoring": "YOUR_REFACTORING_TYPE_ENUM_OPTION_GID_HERE"
+    "🔌 Integration": "YOUR_INTEGRATION_TYPE_ENUM_OPTION_GID_HERE"
+    "🎨 Design": "YOUR_DESIGN_TYPE_ENUM_OPTION_GID_HERE"
+    "🤔 User Clarification": "YOUR_CLARIFICATION_TYPE_ENUM_OPTION_GID_HERE"
+    "📝 Documentation": "YOUR_DOCUMENTATION_TYPE_ENUM_OPTION_GID_HERE"
+    "✨ Feature": "YOUR_FEATURE_TYPE_ENUM_OPTION_GID_HERE"
+    "🧪 Testing": "YOUR_TESTING_TYPE_ENUM_OPTION_GID_HERE"
+    "🐛 Bug": "YOUR_BUG_TYPE_ENUM_OPTION_GID_HERE"
+    "🚨 Incident": "YOUR_INCIDENT_TYPE_ENUM_OPTION_GID_HERE"
+    "🛠️ DevOps": "YOUR_DEVOPS_TYPE_ENUM_OPTION_GID_HERE"
+    "🔍 Research": "YOUR_RESEARCH_TYPE_ENUM_OPTION_GID_HERE"
+    "Other": "YOUR_OTHER_TYPE_ENUM_OPTION_GID_HERE"
+
+  # Validation status - Task validation states
+  validation_status:
+    "✅ Approved": "YOUR_APPROVED_ENUM_OPTION_GID_HERE"
+    "🤖 Auto-Approved": "YOUR_AUTO_APPROVED_ENUM_OPTION_GID_HERE"
+    "⏱️ In Progress": "YOUR_IN_PROGRESS_ENUM_OPTION_GID_HERE"
+    "Stuck": "YOUR_STUCK_ENUM_OPTION_GID_HERE"
+    "📋  Proposed / Needs Review": "YOUR_PROPOSED_ENUM_OPTION_GID_HERE"
+    "❌ Rejected / Wontfix": "YOUR_REJECTED_ENUM_OPTION_GID_HERE"
+    "📌 Proposed Follow-up": "YOUR_FOLLOWUP_ENUM_OPTION_GID_HERE"
+
+  # Execution status - Task execution states
+  execution_status:
+    Pending: "YOUR_PENDING_ENUM_OPTION_GID_HERE"
+    "In Progress": "YOUR_IN_PROGRESS_EXEC_ENUM_OPTION_GID_HERE"
+    Completed: "YOUR_COMPLETED_ENUM_OPTION_GID_HERE"
+    Failed: "YOUR_FAILED_ENUM_OPTION_GID_HERE"
+    Blocked: "YOUR_BLOCKED_ENUM_OPTION_GID_HERE"
+    Skipped: "YOUR_SKIPPED_ENUM_OPTION_GID_HERE"
+
+  # Source agents - Which automated agents can create tasks
+  # Only needed if you're using automated agents
+  source_agent:
+    testing: "YOUR_TESTING_AGENT_ENUM_OPTION_GID_HERE"
+    security: "YOUR_SECURITY_AGENT_ENUM_OPTION_GID_HERE"
+    performance-optimization: "YOUR_PERFORMANCE_AGENT_ENUM_OPTION_GID_HERE"
+    integration: "YOUR_INTEGRATION_AGENT_ENUM_OPTION_GID_HERE"
+    vsm-audit: "YOUR_AUDIT_AGENT_ENUM_OPTION_GID_HERE"
+    data: "YOUR_DATA_AGENT_ENUM_OPTION_GID_HERE"
+    vsm-intelligence: "YOUR_INTELLIGENCE_AGENT_ENUM_OPTION_GID_HERE"
+    designer: "YOUR_DESIGNER_AGENT_ENUM_OPTION_GID_HERE"
+    user-clarification: "YOUR_CLARIFICATION_AGENT_ENUM_OPTION_GID_HERE"
+    architecture: "YOUR_ARCHITECTURE_AGENT_ENUM_OPTION_GID_HERE"
+    requirements-analyst: "YOUR_REQUIREMENTS_AGENT_ENUM_OPTION_GID_HERE"
+    code-builder: "YOUR_CODE_BUILDER_AGENT_ENUM_OPTION_GID_HERE"
+    frontend-specialist: "YOUR_FRONTEND_AGENT_ENUM_OPTION_GID_HERE"
+
+  # Effort estimates - Standard sizing for tasks
+  effort_estimate:
+    "S - Small (< 4h)": "YOUR_SMALL_EFFORT_ENUM_OPTION_GID_HERE"
+    "M - Medium (1-2d)": "YOUR_MEDIUM_EFFORT_ENUM_OPTION_GID_HERE"
+    "L - Large (3-5d)": "YOUR_LARGE_EFFORT_ENUM_OPTION_GID_HERE"
+    "XL - Extra Large (1w+)": "YOUR_XL_EFFORT_ENUM_OPTION_GID_HERE"
+
+  # Execution location - Where tasks are executed
+  execution_location:
+    local: "YOUR_LOCAL_EXEC_ENUM_OPTION_GID_HERE"
+    remote: "YOUR_REMOTE_EXEC_ENUM_OPTION_GID_HERE"
+
+# ============================================================================
+# VSM PROJECT MAPPINGS (OPTIONAL)
+# ============================================================================
+# VSM (Viable System Model) project GIDs for multi-homing tasks
+# This allows tasks to be automatically added to multiple projects:
+# 1. The main task queue (default_project_gid above)
+# 2. A project-specific VSM board for better organization
+#
+# How to find: Run `python3 asana_client.py projects --workspace YOUR_WORKSPACE_GID`
+# Only include this section if you're using VSM-style multi-homing
+vsm_projects:
+  your-project-name-1: "YOUR_VSM_PROJECT_1_GID_HERE"
+  your-project-name-2: "YOUR_VSM_PROJECT_2_GID_HERE"
+  # Add more VSM projects as needed
+
+# ============================================================================
+# FRIENDLY NAME MAPPINGS
+# ============================================================================
+# These mappings allow the CLI to accept friendly names and map them to the
+# proper enum option GIDs. This makes the CLI more user-friendly.
+# You can customize these aliases to match your team's terminology.
+
+mappings:
+  # Priority aliases - Alternative names for priority levels
+  priority:
+    Critical: P0
+    High: P1
+    Medium: P2
+    Low: P3
+
+  # Task type aliases - Map simple names to full enum option names
+  # Allows you to use `--type bug` instead of `--type "🐛 Bug"`
+  task_type:
+    security: "🔒 Security"
+    architecture: "🏗️ Architecture"
+    performance: "⚡ Performance"
+    refactor: "♻️ Refactoring"
+    refactoring: "♻️ Refactoring"
+    integration: "🔌 Integration"
+    design: "🎨 Design"
+    user_clarification: "🤔 User Clarification"
+    documentation: "📝 Documentation"
+    feature: "✨ Feature"
+    testing: "🧪 Testing"
+    bug: "🐛 Bug"
+    incident: "🚨 Incident"
+    devops: "🛠️ DevOps"
+    research: "🔍 Research"
+
+  # Effort aliases - Support multiple ways to specify effort
+  effort:
+    S: "S - Small (< 4h)"
+    M: "M - Medium (1-2d)"
+    L: "L - Large (3-5d)"
+    XL: "XL - Extra Large (1w+)"
+    small: "S - Small (< 4h)"
+    medium: "M - Medium (1-2d)"
+    large: "L - Large (3-5d)"
+    extra_large: "XL - Extra Large (1w+)"
+    # Hour-based estimates
+    "1 hour": "S - Small (< 4h)"
+    "1-2 hours": "S - Small (< 4h)"
+    "2-3 hours": "S - Small (< 4h)"
+    "3-4 hours": "S - Small (< 4h)"
+    "4-6 hours": "M - Medium (1-2d)"
+    "6-8 hours": "M - Medium (1-2d)"
+    "8-10 hours": "M - Medium (1-2d)"
+    # Day-based estimates
+    "1 day": "M - Medium (1-2d)"
+    "1-2 days": "M - Medium (1-2d)"
+    "2 days": "M - Medium (1-2d)"
+    "2-3 days": "L - Large (3-5d)"
+    "3 days": "L - Large (3-5d)"
+    "3-4 days": "L - Large (3-5d)"
+    "3-5 days": "L - Large (3-5d)"
+    "4-5 days": "L - Large (3-5d)"
+    "5 days": "L - Large (3-5d)"
+    # Week-based estimates
+    "1 week": "XL - Extra Large (1w+)"
+    "1-2 weeks": "XL - Extra Large (1w+)"
+    "2 weeks": "XL - Extra Large (1w+)"
+    "2-3 weeks": "XL - Extra Large (1w+)"
+
+  # Validation status aliases
+  validation_status:
+    approved: "✅ Approved"
+    auto_approved: "🤖 Auto-Approved"
+    needs_review: "📋  Proposed / Needs Review"
+    in_progress: "⏱️ In Progress"
+    stuck: "Stuck"
+    rejected: "❌ Rejected / Wontfix"
+    proposed: "📋  Proposed / Needs Review"
+    proposed_followup: "📌 Proposed Follow-up"
+    followup: "📌 Proposed Follow-up"
+
+  # Execution status aliases
+  execution_status:
+    pending: "Pending"
+    in_progress: "In Progress"
+    completed: "Completed"
+    failed: "Failed"
+    blocked: "Blocked"
+    skipped: "Skipped"
+
+  # Project name aliases - Shortcuts for project names
+  # Customize these to match your project naming conventions
+  project:
+    # Example: scaffold: your-main-project
+    # Add your own project aliases here
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+# Once this config is in place, you can use the CLI like:
+#
+# Create a task:
+#   /asana create "Fix bug" --project your-project --priority P1 --type bug --effort M
+#
+# The CLI will:
+# 1. Map friendly names to full enum names (via mappings section)
+# 2. Map enum names to enum option GIDs (via enum_options section)
+# 3. Set the appropriate custom fields with those GIDs
+# 4. If VSM projects are configured, multi-home to both main queue and project board
+#
+# Search tasks:
+#   /asana search "authentication"
+#
+# Update task:
+#   /asana update TASK_GID --completed true
+#
+# Get task details:
+#   /asana task TASK_GID
+#
+# ============================================================================
+# GETTING STARTED
+# ============================================================================
+# 1. Get your workspace GID: `python3 asana_client.py workspaces`
+# 2. Get your project GID: `python3 asana_client.py projects --workspace YOUR_WORKSPACE_GID`
+# 3. Discover custom fields: `python3 setup_asana_custom_fields.py --discover --project YOUR_PROJECT_GID`
+# 4. Fill in the GIDs in this file, starting with workspace, default_project_gid, and core custom_fields
+# 5. Copy this file to ~/.config/claude-code-scaffold/asana_config.yaml
+# 6. Test with: `/asana create "Test task" --project your-project --priority P2 --type feature --effort S`

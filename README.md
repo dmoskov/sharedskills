@@ -18,6 +18,14 @@ cd asana && ./setup.sh
 asana my-tasks -i
 ```
 
+Also includes:
+- **Workspace config** (`asana_config_loader.py`) — keep all your workspace's GIDs
+  (custom fields, enum options, projects) in one YAML file instead of in code.
+  Start from `asana_config.example.yaml`, then `python3 asana_config_loader.py validate`.
+- **Task decomposition** (`decomposition.py` + [skills/task-decomposition](./skills/task-decomposition/)) —
+  break large tasks into file-level Asana subtasks with proper custom fields.
+  Works with any workspace via the config above.
+
 [Full documentation](./asana/README.md)
 
 ### [Letta](./letta/)
@@ -51,6 +59,9 @@ echo "LETTA_API_KEY=your_key" > ~/.claude/hooks/letta/.env
 ai-dev-tools/
 ├── asana/                  # Asana CLI tool
 │   ├── asana_client.py     # Main client (CLI & library)
+│   ├── asana_config_loader.py      # Workspace config (GIDs) from YAML
+│   ├── asana_config.example.yaml   # Annotated config example
+│   ├── decomposition.py    # Synapse-style task decomposition algorithm
 │   ├── bin/asana           # CLI wrapper script
 │   ├── setup.sh            # Installer (venv + ~/bin symlink)
 │   ├── README.md           # Documentation

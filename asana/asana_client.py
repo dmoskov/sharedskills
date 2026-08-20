@@ -521,8 +521,23 @@ class AsanaClient:
         assignee: str = None,
         due_on: str = None,
         notes: str = None,
+        custom_fields: Optional[Dict[str, Any]] = None,
+        projects: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Create a subtask."""
+        """
+        Create a subtask.
+
+        Args:
+            parent_gid: Parent task GID
+            name: Subtask name (required)
+            assignee: User GID or 'me'
+            due_on: Due date in YYYY-MM-DD format
+            notes: Plain text description
+            custom_fields: Dict mapping custom field GIDs to values
+            projects: Project GIDs to multi-home the subtask into.
+                Subtasks do NOT inherit the parent's projects, so pass these
+                explicitly if the subtask should appear on a project board.
+        """
         data = {"name": name}
         if assignee:
             data["assignee"] = assignee
@@ -530,6 +545,10 @@ class AsanaClient:
             data["due_on"] = due_on
         if notes:
             data["notes"] = notes
+        if custom_fields:
+            data["custom_fields"] = custom_fields
+        if projects:
+            data["projects"] = projects
 
         result = self._request("POST", f"tasks/{parent_gid}/subtasks", json_data={"data": data})
         return result.get("data", {})
