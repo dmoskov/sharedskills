@@ -37,7 +37,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install pytest pytest-mock pytest-asyncio requests mistune asana
+        run: pip install pytest pytest-mock pytest-asyncio requests mistune asana pyyaml
 
       - name: Run tests
         run: python -m pytest --tb=short -q
