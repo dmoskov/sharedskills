@@ -328,10 +328,51 @@ goals_api = asana.GoalsApi(client)
 goals = goals_api.get_goals(opts={"workspace": "workspace_gid"})
 ```
 
+## Workspace Configuration (Custom Fields & Enum GIDs)
+
+If you use Asana custom fields (priority, task type, effort, statuses), keep your
+workspace's GIDs in a YAML config instead of hardcoding them:
+
+```bash
+# Generate a starter config
+python3 asana_config_loader.py template > ~/.config/ai-dev-tools/asana_config.yaml
+
+# Fill in your workspace's GIDs (see asana_config.example.yaml for how to find them)
+
+# Check it
+python3 asana_config_loader.py validate
+
+# Print all field/enum GID tables (used by skills and agents)
+python3 asana_config_loader.py dump
+```
+
+```python
+from asana_config_loader import load_config
+
+config = load_config()
+priority_field = config.get_custom_field_gid("priority")
+p0_option = config.get_enum_option_gid("priority", "P0")
+```
+
+The config path defaults to `~/.config/ai-dev-tools/asana_config.yaml` and can be
+overridden with `ASANA_CONFIG_PATH`.
+
+## Task Decomposition
+
+`decomposition.py` implements a Synapse-style algorithm (arXiv:2601.08156) for breaking
+complex tasks into optimally-sized subtasks: constraint analysis, dependency mapping,
+priority assignment, and granularity optimization. It is stdlib-only and Asana-agnostic —
+pair it with `asana_client.py` to create the resulting subtasks.
+
+For interactive use in Claude Code, see the
+[task-decomposition skill](../skills/task-decomposition/), which breaks a large task
+into file-level Asana subtasks using your workspace config (no hardcoded GIDs).
+
 ## Requirements
 
 ```
 requests>=2.25.0
+pyyaml>=6.0        # only for asana_config_loader.py
 ```
 
 ## License
