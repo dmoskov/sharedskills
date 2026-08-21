@@ -88,6 +88,8 @@ ai-dev-tools/
 │   ├── claudemd-generator/ # Generate a CLAUDE.md for any project
 │   ├── security-audit/     # OWASP Top 10 codebase audit
 │   ├── code-cleanup/       # Dead code, error handling, types, extraction
+│   ├── self-critique/      # Independent Gemini review of completed work
+│   ├── environmental-scan/ # CVEs, API changes, releases affecting your deps
 │   ├── rlm/                # Recursive Language Model (long-context work)
 │   ├── quick-wins/         # Codebase-hygiene playbooks
 │   └── brand-identity/     # Logo + theme method
