@@ -6,9 +6,15 @@ Reusable skills for Claude Code, in SKILL.md format.
 |-------|--------------|
 | [asana](./asana/) | Manage Asana tasks via direct REST API (fast, reliable alternative to MCP Asana tools). See its [README](./asana/README.md). |
 | [task-decomposition](./task-decomposition/) | Break a large or vague task into 3-8 file-level Asana subtasks with custom fields. Workspace-agnostic — all GIDs come from your [YAML config](../asana/asana_config.example.yaml). |
+| [claudemd-generator](./claudemd-generator/) | Scan any codebase and generate a comprehensive CLAUDE.md project guide. |
+| [security-audit](./security-audit/) | Comprehensive security audit of any codebase: OWASP Top 10 and common vulnerability patterns. |
+| [code-cleanup](./code-cleanup/) | Targeted cleanup passes — dead code, error handling, type annotations, large-function extraction. Complements the [quick-wins](./quick-wins/) playbooks. |
 | [rlm](./rlm/) | Recursive Language Model: process documents or codebases too large for one context window by delegating to sub-agents. |
 | [quick-wins](./quick-wins/) | A library of step-by-step codebase-hygiene playbooks (dead code removal, missing tests, large-function extraction, ...). See its [README](./quick-wins/README.md). |
 | [brand-identity](./brand-identity/) | Create a logo mark + token-based theme ("Asphodel method": one SVG path composed by rotation, one-primary/one-accent CSS variables). |
+
+Also in this repo: [agents/](../agents/) — 16 generic subagent personas (debugger,
+architecture, testing, ...) for `.claude/agents/` directories.
 
 ## Using These Skills in Claude Code
 

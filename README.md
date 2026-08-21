@@ -85,9 +85,13 @@ ai-dev-tools/
 ├── skills/                 # Claude Code skills (see skills/README.md)
 │   ├── asana/              # Asana CLI skill
 │   ├── task-decomposition/ # Break big tasks into file-level Asana subtasks
+│   ├── claudemd-generator/ # Generate a CLAUDE.md for any project
+│   ├── security-audit/     # OWASP Top 10 codebase audit
+│   ├── code-cleanup/       # Dead code, error handling, types, extraction
 │   ├── rlm/                # Recursive Language Model (long-context work)
 │   ├── quick-wins/         # Codebase-hygiene playbooks
 │   └── brand-identity/     # Logo + theme method
+├── agents/                 # Generic Claude Code subagent personas (see agents/README.md)
 ├── tools/                  # Letta agent tools (AWS, Claude, DB, web search, ...)
 ├── chat/                   # Chat engine utilities
 ├── sharedskills/           # Symlink → tools/ (backward compatibility)

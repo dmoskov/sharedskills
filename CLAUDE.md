@@ -14,7 +14,9 @@ Cross-project shared utilities for Dustin's AI development ecosystem.
 - **`skills/`** — Claude Code skills (SKILL.md format)
   - `asana/` — Asana CLI skill
   - `task-decomposition/` — Break large tasks into file-level Asana subtasks (config-driven, no hardcoded GIDs)
+  - `claudemd-generator/`, `security-audit/`, `code-cleanup/` — generic codebase skills
   - `rlm/` — Recursive Language Model for long-context decomposition
+- **`agents/`** — Generic Claude Code subagent personas for `.claude/agents/` (16 roles: debugger, architecture, testing, ...)
 - **`tools/`** — Letta agent tools (installed on all agents)
   - `aws_tool.py`, `claude_tool.py`, `db_query_tool.py`, `fetch_webpage_tool.py`, `semantic_search_tool.py`, `web_search_tool.py`
 
