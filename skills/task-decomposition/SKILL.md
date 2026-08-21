@@ -51,7 +51,29 @@ Subtasks are created as Asana subtasks of the parent task, with custom fields
 - A task touches multiple files or modules and is too broad for a single work session
 - A task description is vague and needs concrete file targets before execution
 - An XL or L effort task needs splitting into S/M subtasks
-- Automated pipelines may also trigger decomposition after repeated failed attempts
+- A task has failed or timed out repeatedly — recurring failure usually means it's
+  too large, not that execution keeps getting unlucky
+
+## Should You Decompose? (pre-flight checks)
+
+Decomposition has a cost — more tasks to track, coordination overhead, context split
+across siblings. Before decomposing, check:
+
+- **Already decomposed?** If the task has existing subtasks, work those instead of
+  creating a second layer.
+- **Is it itself a subtask?** Don't create sub-subtasks; work it directly or revisit
+  the parent's decomposition.
+- **Already in progress?** Read recent comments/activity — if someone is mid-way
+  through, decomposing now fragments their work.
+- **Big but not complex?** Some L/XL tasks are just *long* (a mechanical rename, a
+  large but uniform migration). Length alone doesn't justify decomposition — only
+  multiple independent components do.
+- **Actually atomic?** A single-file change or simple bug fix never needs this skill,
+  whatever its effort label says.
+
+If unsure, do a dry run first: produce the subtask list (Steps 1-5 of the prompt) and
+review it before creating anything in Asana. If the "decomposition" comes out as one
+real subtask plus filler, the task didn't need decomposing.
 
 ## Input
 

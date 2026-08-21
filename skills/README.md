@@ -8,6 +8,8 @@ Reusable skills for Claude Code, in SKILL.md format.
 | [task-decomposition](./task-decomposition/) | Break a large or vague task into 3-8 file-level Asana subtasks with custom fields. Workspace-agnostic — all GIDs come from your [YAML config](../asana/asana_config.example.yaml). |
 | [claudemd-generator](./claudemd-generator/) | Scan any codebase and generate a comprehensive CLAUDE.md project guide. |
 | [security-audit](./security-audit/) | Comprehensive security audit of any codebase: OWASP Top 10 and common vulnerability patterns. |
+| [self-critique](./self-critique/) | Post-task review by an independent Gemini reviewer ("confessions" pattern) — structured issues with severity and fixes. Needs a Gemini API key. |
+| [environmental-scan](./environmental-scan/) | Scan your dependencies and upstream APIs for CVEs, breaking changes, and notable releases; severity-ranked report. |
 | [code-cleanup](./code-cleanup/) | Targeted cleanup passes — dead code, error handling, type annotations, large-function extraction. Complements the [quick-wins](./quick-wins/) playbooks. |
 | [rlm](./rlm/) | Recursive Language Model: process documents or codebases too large for one context window by delegating to sub-agents. |
 | [quick-wins](./quick-wins/) | A library of step-by-step codebase-hygiene playbooks (dead code removal, missing tests, large-function extraction, ...). See its [README](./quick-wins/README.md). |
