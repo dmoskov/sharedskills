@@ -46,12 +46,22 @@ echo "LETTA_API_KEY=your_key" > ~/.claude/hooks/letta/.env
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/your-org/ai-dev-tools.git
+   git clone https://github.com/dmoskov/sharedskills.git ai-dev-tools
    ```
 
 2. Set up the tools you need:
    - For Asana: `cd asana && ./setup.sh` and set `ASANA_ACCESS_TOKEN`
+   - If you use Asana custom fields (statuses, effort, task types) or the
+     task-decomposition skill, also create your workspace config:
+     ```bash
+     python3 asana/asana_config_loader.py template > ~/.config/ai-dev-tools/asana_config.yaml
+     # fill in your workspace's GIDs (see asana/asana_config.example.yaml), then:
+     python3 asana/asana_config_loader.py validate
+     ```
    - For Letta: Run `./letta/install.sh` and set `LETTA_API_KEY`
+
+3. To use the Claude Code skills (`/asana`, `/task-decomposition`, ...), symlink them
+   into `~/.claude/skills/` or a project's `.claude/skills/` — see [skills/README.md](./skills/README.md).
 
 ## Structure
 
@@ -72,6 +82,15 @@ ai-dev-tools/
 │   ├── install.sh          # Installer
 │   ├── README.md           # Documentation
 │   └── SETUP.md            # Setup guide
+├── skills/                 # Claude Code skills (see skills/README.md)
+│   ├── asana/              # Asana CLI skill
+│   ├── task-decomposition/ # Break big tasks into file-level Asana subtasks
+│   ├── rlm/                # Recursive Language Model (long-context work)
+│   ├── quick-wins/         # Codebase-hygiene playbooks
+│   └── brand-identity/     # Logo + theme method
+├── tools/                  # Letta agent tools (AWS, Claude, DB, web search, ...)
+├── chat/                   # Chat engine utilities
+├── sharedskills/           # Symlink → tools/ (backward compatibility)
 ├── README.md               # This file
 ├── CLAUDE.md               # Guidelines for Claude
 └── LICENSE                 # MIT License

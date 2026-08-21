@@ -1,107 +1,48 @@
-# Asana Skill for Claude Code
+# Claude Code Skills
 
-A reliable, timeout-resistant skill for managing Asana tasks directly from Claude Code. This skill provides a fast alternative to MCP Asana tools that frequently timeout or hang.
+Reusable skills for Claude Code, in SKILL.md format.
 
-## What This Does
+| Skill | What it does |
+|-------|--------------|
+| [asana](./asana/) | Manage Asana tasks via direct REST API (fast, reliable alternative to MCP Asana tools). See its [README](./asana/README.md). |
+| [task-decomposition](./task-decomposition/) | Break a large or vague task into 3-8 file-level Asana subtasks with custom fields. Workspace-agnostic — all GIDs come from your [YAML config](../asana/asana_config.example.yaml). |
+| [rlm](./rlm/) | Recursive Language Model: process documents or codebases too large for one context window by delegating to sub-agents. |
+| [quick-wins](./quick-wins/) | A library of step-by-step codebase-hygiene playbooks (dead code removal, missing tests, large-function extraction, ...). See its [README](./quick-wins/README.md). |
+| [brand-identity](./brand-identity/) | Create a logo mark + token-based theme ("Asphodel method": one SVG path composed by rotation, one-primary/one-accent CSS variables). |
 
-The `/asana` skill lets you interact with Asana tasks directly from Claude Code sessions:
+## Using These Skills in Claude Code
 
-- **List workspaces and projects** to discover your Asana structure
-- **Create tasks** with names, descriptions, and due dates
-- **Read task details** including comments and activity
-- **Update tasks** (mark complete, change fields)
-- **Search tasks** by keyword
-- **Manage comments** on tasks
-- **Handle dependencies** between tasks
-
-## Why This Exists
-
-**Problem:** MCP Asana tools (`mcp__asana__*`) frequently timeout (20+ minutes) or hang entirely, making them unreliable for production use.
-
-**Solution:** This skill uses direct REST API calls with:
-- **30-second timeouts** on all requests (vs 20+ minute hangs)
-- **Automatic retry** with exponential backoff
-- **Clear error messages** when things go wrong
-- **Reliable token refresh** via OAuth or environment variables
-
-**Always use this skill instead of MCP Asana tools.**
-
-## Quick Start
-
-### 1. Get Authentication
-
-**Option A: Personal Access Token (Quick)**
-1. Go to [Asana Developer Console](https://app.asana.com/0/developer-console)
-2. Click "Personal Access Tokens" → "Create New Token"
-3. Copy the token and set: `export ASANA_ACCESS_TOKEN="your_token"`
-
-**Option B: OAuth (Recommended)**
-```bash
-cd asana && python3 oauth_setup.py
-```
-
-### 2. Find Your Workspace
+Claude Code discovers skills from `.claude/skills/` directories. Symlink the ones you
+want (symlinks keep them updated when you `git pull` this repo):
 
 ```bash
-python3 asana_client.py workspaces
+# Available in every project (user-level)
+mkdir -p ~/.claude/skills
+ln -s /path/to/ai-dev-tools/skills/task-decomposition ~/.claude/skills/task-decomposition
+
+# Or just for one project (checked into that repo if you like)
+mkdir -p /path/to/your-project/.claude/skills
+ln -s /path/to/ai-dev-tools/skills/task-decomposition /path/to/your-project/.claude/skills/task-decomposition
 ```
 
-Optionally set default: `export ASANA_WORKSPACE="your_workspace_gid"`
+Then invoke with `/task-decomposition` (or the skill's name) in a Claude Code session.
 
-### 3. Use the Skill
+### Skills that run scripts from this repo
+
+Some skills (e.g. `task-decomposition`) execute helper scripts that live in this
+repository, so they need to know where your checkout is when invoked from another
+project. Set once in your shell profile:
 
 ```bash
-# List projects
-/asana projects
-
-# Search tasks
-/asana search "authentication"
-
-# Create a task
-/asana create "Fix login bug" --project PROJECT_GID
-
-# Mark complete
-/asana update TASK_GID --completed true
+export AI_DEV_TOOLS_DIR=/path/to/ai-dev-tools
 ```
 
-## Available Commands
+If unset, those skills assume the current directory is the ai-dev-tools checkout
+(which is the case when you work inside this repo, or point commands at a vendored
+copy such as a git submodule).
 
-| Command | Description | Example |
-|---------|-------------|---------|
-| `workspaces` | List available workspaces | `/asana workspaces` |
-| `projects` | List projects in workspace | `/asana projects` |
-| `task <id>` | Get task details | `/asana task 1234567890` |
-| `tasks --project <gid>` | List tasks in project | `/asana tasks --project 123 --incomplete` |
-| `subtasks <id>` | List subtasks | `/asana subtasks 1234567890` |
-| `search <query>` | Search tasks | `/asana search "bug"` |
-| `my-tasks` | Your assigned tasks | `/asana my-tasks` |
-| `stories <id>` | Task comments/activity | `/asana stories 1234567890` |
-| `create` | Create task | `/asana create "Name" --project GID` |
-| `update <id>` | Update task | `/asana update 123 --completed true` |
-| `comment <id>` | Add comment | `/asana comment 123 "Done!"` |
+### Setup
 
-## Troubleshooting
-
-### "No Asana token found"
-```bash
-# Option 1: Set token directly
-export ASANA_ACCESS_TOKEN="your_token"
-
-# Option 2: Use OAuth
-python3 oauth_setup.py
-```
-
-### "Workspace not found"
-```bash
-# List workspaces to find your GID
-python3 asana_client.py workspaces
-
-# Set default workspace
-export ASANA_WORKSPACE="your_workspace_gid"
-```
-
-## Resources
-
-- [Asana API Documentation](https://developers.asana.com/docs)
-- [OAuth Setup Guide](https://developers.asana.com/docs/oauth)
-- [Rate Limits](https://developers.asana.com/docs/rate-limits)
+Most skills need the Asana client dependencies and authentication — see
+[SETUP.md](./SETUP.md). The `task-decomposition` skill additionally needs your
+workspace config (`asana_config_loader.py`) — see its [SKILL.md](./task-decomposition/SKILL.md).

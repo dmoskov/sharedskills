@@ -36,6 +36,15 @@ Subtasks are created as Asana subtasks of the parent task, with custom fields
    ```
    See `asana/asana_config.example.yaml` for a fully annotated example, including how
    to discover the GIDs for your workspace, projects, custom fields, and enum options.
+3. To invoke this skill from other projects, symlink it into `~/.claude/skills/` (or a
+   project's `.claude/skills/`) and tell it where this repo lives:
+   ```bash
+   ln -s /path/to/ai-dev-tools/skills/task-decomposition ~/.claude/skills/task-decomposition
+   export AI_DEV_TOOLS_DIR=/path/to/ai-dev-tools   # add to your shell profile
+   ```
+   All `asana/...` paths in this skill resolve against `$AI_DEV_TOOLS_DIR` (falling back
+   to the current directory, which works when your session is inside this repo or a
+   checkout that vendors it, e.g. as a git submodule).
 
 ## When to Use
 

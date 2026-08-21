@@ -3,7 +3,12 @@
 ## Prerequisites
 
 - Python 3.8+
-- `requests` library: `pip install requests`
+- Client dependencies: `pip install -r asana/requirements.txt`
+  (installs `requests`, `mistune` for markdown-to-Asana conversion, and `pyyaml`
+  for the workspace config loader)
+
+Alternatively, `cd asana && ./setup.sh` creates a virtualenv with everything and
+links the `asana` CLI into `~/bin`.
 
 ## Step 1: Get Authentication
 
@@ -81,5 +86,5 @@ python3 asana_client.py search "test"
 
 ### "Module not found"
 ```bash
-pip install requests
+pip install -r asana/requirements.txt
 ```

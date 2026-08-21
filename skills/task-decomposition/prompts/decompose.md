@@ -6,6 +6,13 @@ concrete, file-level Asana subtasks that can be executed independently.
 All Asana GIDs (workspace, projects, custom fields, enum options) come from the user's
 workspace configuration — never hardcode them. Load them in Step 0.
 
+**Path convention:** every `asana/...` path below is relative to the ai-dev-tools
+checkout. Use `"${AI_DEV_TOOLS_DIR:-.}"` as the prefix in bash — if the
+`AI_DEV_TOOLS_DIR` environment variable is unset, the current directory must be the
+ai-dev-tools repo (or a checkout that vendors it; adjust the prefix accordingly, e.g.
+`claude-code-scaffold/ai-dev-tools` when it's a submodule). If neither resolves, ask
+the user where their ai-dev-tools checkout is.
+
 ---
 
 ## Step 0: Load the Workspace Configuration
@@ -13,7 +20,7 @@ workspace configuration — never hardcode them. Load them in Step 0.
 Dump the workspace's field and enum GID tables:
 
 ```bash
-python3 asana/asana_config_loader.py dump
+python3 "${AI_DEV_TOOLS_DIR:-.}/asana/asana_config_loader.py" dump
 ```
 
 This prints the workspace GID, the main task queue (default project) GID, and markdown
@@ -23,7 +30,7 @@ wherever this prompt refers to a field or enum GID.
 If the command fails because no config exists, stop and tell the user to run:
 
 ```bash
-python3 asana/asana_config_loader.py template > ~/.config/ai-dev-tools/asana_config.yaml
+python3 "${AI_DEV_TOOLS_DIR:-.}/asana/asana_config_loader.py" template > ~/.config/ai-dev-tools/asana_config.yaml
 ```
 
 and fill in their workspace's GIDs (see `asana/asana_config.example.yaml` for how to
@@ -56,13 +63,14 @@ Parse the input and extract:
 If the input is an Asana task URL or GID, fetch the task details:
 
 ```bash
-python3 asana/asana_client.py task <TASK_GID>
+python3 "${AI_DEV_TOOLS_DIR:-.}/asana/asana_client.py" task <TASK_GID>
 ```
 
 Or programmatically:
 
 ```python
-import sys; sys.path.insert(0, "asana")
+import os, sys
+sys.path.insert(0, os.path.join(os.environ.get("AI_DEV_TOOLS_DIR", "."), "asana"))
 from asana_client import AsanaClient
 task = AsanaClient().get_task("<TASK_GID>")
 ```
@@ -177,7 +185,8 @@ Use the client and config loader together. Substitute the field and enum GIDs fr
 Step 0 dump — the names below (`project`, `task_type`, etc.) are config keys, not GIDs:
 
 ```python
-import sys; sys.path.insert(0, "asana")
+import os, sys
+sys.path.insert(0, os.path.join(os.environ.get("AI_DEV_TOOLS_DIR", "."), "asana"))
 from asana_client import AsanaClient
 from asana_config_loader import load_config
 
@@ -230,7 +239,7 @@ Note: enum option names in `get_enum_option_gid()` must match your config exactl
    Critical path: 1 → 3 → 5
    ```
    ```bash
-   python3 asana/asana_client.py comment <PARENT_TASK_GID> "Decomposed into N subtasks: ..."
+   python3 "${AI_DEV_TOOLS_DIR:-.}/asana/asana_client.py" comment <PARENT_TASK_GID> "Decomposed into N subtasks: ..."
    ```
 
 2. If the parent task is L or XL effort, update it to reflect that it's now a container task
