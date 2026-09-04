@@ -79,6 +79,13 @@ class AsanaClient:
     All operations have 30-second timeouts and automatic retries.
     """
 
+    # Fields returned by list/search endpoints. custom_fields is included so
+    # enum/text custom field values are readable straight off the task dict.
+    DEFAULT_TASK_LIST_FIELDS = (
+        "name,start_on,due_on,completed,assignee.name,projects.name,"
+        "custom_fields.gid,custom_fields.name,custom_fields.display_value"
+    )
+
     def __init__(self, token: str = None, workspace: str = None):
         """
         Initialize client.
@@ -314,10 +321,21 @@ class AsanaClient:
         workspace: str = None,
         completed: bool = None,
         limit: int = 100,
+        opt_fields: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Get tasks from project, section, or by assignee."""
+        """Get tasks from project, section, or by assignee.
+
+        Args:
+            opt_fields: Comma-separated Asana opt_fields. Defaults to
+                DEFAULT_TASK_LIST_FIELDS, which includes custom_fields so
+                callers can read enum values (Project, Execution Status, ...)
+                without a second round-trip per task.
+            limit: Page size; Asana caps this at 100.
+        """
+        if limit > 100:
+            raise ValueError(f"limit must be <= 100 (Asana API page cap); got {limit}")
         params = {
-            "opt_fields": "name,start_on,due_on,completed,assignee.name,projects.name",
+            "opt_fields": opt_fields or self.DEFAULT_TASK_LIST_FIELDS,
             "limit": str(limit),
         }
 
@@ -347,6 +365,7 @@ class AsanaClient:
         completed: bool = None,
         custom_fields: Optional[Dict[str, str]] = None,
         limit: int = 100,
+        opt_fields: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Search tasks with filters.
 
@@ -354,9 +373,11 @@ class AsanaClient:
             custom_fields: Dict mapping custom field GIDs to enum option GIDs.
                            e.g. {"1213217236613486": "1213217236613488"} filters
                            for Status=Triaged.
+            opt_fields: Comma-separated Asana opt_fields; defaults to
+                        DEFAULT_TASK_LIST_FIELDS (includes custom_fields).
         """
         params = {
-            "opt_fields": "name,start_on,due_on,completed,assignee.name,projects.name",
+            "opt_fields": opt_fields or self.DEFAULT_TASK_LIST_FIELDS,
             "limit": str(min(limit, 100)),
             "sort_by": "modified_at",
             "sort_ascending": "false",

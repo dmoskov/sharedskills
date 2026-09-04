@@ -362,6 +362,39 @@ class TestTaskOperations:
 
         assert len(result) == 2
 
+    def test_get_tasks_includes_custom_fields_by_default(self, client):
+        """List endpoints must request custom_fields so enum values are readable."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": []}
+        client._session.request.return_value = mock_response
+
+        client.get_tasks(project="proj1")
+
+        params = client._session.request.call_args.kwargs.get("params") or client._session.request.call_args[1].get("params")
+        assert "custom_fields.display_value" in params["opt_fields"]
+        assert "custom_fields.name" in params["opt_fields"]
+
+    def test_get_tasks_opt_fields_override(self, client):
+        """Explicit opt_fields replaces the default field list."""
+        mock_response = Mock()
+        mock_response.ok = True
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": []}
+        client._session.request.return_value = mock_response
+
+        client.get_tasks(project="proj1", opt_fields="name,notes")
+
+        params = client._session.request.call_args.kwargs.get("params") or client._session.request.call_args[1].get("params")
+        assert params["opt_fields"] == "name,notes"
+
+    def test_get_tasks_rejects_limit_over_page_cap(self, client):
+        """Asana caps limit at 100; fail before the API does."""
+        with pytest.raises(ValueError) as exc_info:
+            client.get_tasks(project="proj1", limit=500)
+        assert "<= 100" in str(exc_info.value)
+
     def test_get_tasks_requires_context(self, client):
         """Should raise error if no project/section/assignee provided."""
         with pytest.raises(ValueError) as exc_info:
