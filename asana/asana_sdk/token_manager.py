@@ -657,11 +657,18 @@ class TokenManager:
                     SecretId=secret_arn, SecretString=json.dumps(secret_data)
                 )
                 logger.info("Updated Secrets Manager with new access token")
-            except Exception as e:
-                logger.warning(f"Failed to update Secrets Manager cache: {e}")
+            except Exception:
+                # A rotated refresh token must be durable before it is used.
+                # Do not expose provider/AWS payloads or accept partial success.
+                raise AsanaAuthenticationError(
+                    "OAuth refresh could not be saved to Secrets Manager; request stopped."
+                ) from None
 
             logger.info(f"Access token refreshed successfully after {attempt + 1} attempt(s)")
             return new_access_token
+
+        except AsanaAuthenticationError:
+            raise
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode() if e.fp else "No error details"

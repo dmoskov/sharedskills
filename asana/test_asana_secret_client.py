@@ -163,3 +163,33 @@ def test_request_stops_if_secret_becomes_unavailable(monkeypatch):
         with pytest.raises(AsanaAuthError):
             client._request("GET", "workspaces")
     api.assert_not_called()
+
+
+@pytest.mark.parametrize("on_request", [False, True])
+def test_failed_rotated_grant_writeback_stops_without_payload_or_fallback(monkeypatch, caplog, on_request):
+    sm = mock_secret(monkeypatch, expired=not on_request)
+    monkeypatch.setenv("ASANA_ACCESS_TOKEN", "fake-fallback-token")
+    client = AsanaClient() if on_request else None
+    sm.get_secret_value.return_value = {"SecretString": json.dumps(credentials(expired=True))}
+    sm.put_secret_value.side_effect = RuntimeError("sensitive-payload-sentinel")
+    response = io.StringIO(json.dumps({
+        "access_token": "fake-fresh-token", "refresh_token": "fake-rotated-token", "expires_in": 3600,
+    }))
+    with patch.object(token_manager.urllib.request, "urlopen", return_value=response) as provider, \
+            patch.object(AsanaClient, "_load_oauth_token", side_effect=AssertionError("File fallback forbidden")), \
+            patch("requests.Session.request") as api:
+        with pytest.raises(AsanaAuthError, match="could not be saved") as failure:
+            if on_request:
+                client._request("GET", "workspaces")
+            else:
+                AsanaClient()
+    provider.assert_called_once()
+    sm.put_secret_value.assert_called_once()
+    saved = json.loads(sm.put_secret_value.call_args.kwargs["SecretString"])
+    assert saved["refresh_token"] == "fake-rotated-token"
+    api.assert_not_called()
+    import traceback
+    rendered = "".join(traceback.format_exception(failure.value))
+    for forbidden in ("sensitive-payload-sentinel", "fake-rotated-token", "fake-fresh-token"):
+        assert forbidden not in rendered
+        assert forbidden not in caplog.text
