@@ -5,7 +5,7 @@ Cross-project shared utilities for Dustin's AI development ecosystem.
 ## Structure
 
 - **`asana/`** — Asana client library and SDK. Used by all projects via `sys.path.insert(0, "ai-dev-tools/asana")`.
-  - `asana_client.py` — Unified Asana client (PAT auth preferred)
+  - `asana_client.py` — Unified Asana client (Secrets Manager OAuth preferred; injected tokens supported)
   - `asana_config_loader.py` — Workspace config (GIDs) from YAML (`~/.config/ai-dev-tools/asana_config.yaml`)
   - `decomposition.py` — Synapse-style task decomposition algorithm (stdlib-only)
   - `asana_sdk/` — Full SDK: tasks, projects, custom_fields, goals, attachments, users
