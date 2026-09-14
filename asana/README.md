@@ -9,7 +9,7 @@ This directory contains two complementary clients:
 | | `asana_client.py` | `asana_sdk/` |
 |---|---|---|
 | **Purpose** | Primary client for most operations | Extended features via official SDK |
-| **Dependencies** | `requests` only | Official `asana` package |
+| **Dependencies** | `requests`; optional `boto3` for Secrets Manager | Official `asana` package |
 | **Auth** | OAuth (recommended) or PAT | OAuth with auto-refresh |
 | **Use when** | CLI usage, simple scripts, most tasks | Custom fields, attachments, goals |
 
@@ -36,10 +36,34 @@ This directory contains two complementary clients:
 - 30-second timeouts on all requests (vs MCP tools that can hang)
 - Automatic retry with exponential backoff
 - Clear, actionable error messages
-- No external dependencies beyond `requests`
+- Requires `requests`; Secrets Manager OAuth additionally requires `boto3`
 - Works as CLI or Python library
 
 ## Setup
+
+### Existing OAuth grant in Secrets Manager
+
+For an existing OAuth grant stored in AWS Secrets Manager, install `boto3` and
+set the secret's name or ARN:
+
+```bash
+export ASANA_OAUTH_SECRET=your-oauth-secret
+export SECRETS_REGION=us-west-2
+python3 asana_client.py workspaces
+```
+
+The secret must contain `client_id`, `client_secret`, and `refresh_token`, with
+optional cached `access_token` and `expires_at` fields. The caller needs read
+and refresh write-back access to that secret. The client rechecks it before
+each API request and uses the existing token manager's refresh policy.
+`SECRETS_REGION` overrides `AWS_REGION`; the default is `us-west-2`.
+
+An explicit constructor `token=` still overrides all configured sources.
+Otherwise `ASANA_OAUTH_SECRET` takes precedence over `ASANA_ACCESS_TOKEN` and
+local files. A configured-secret authentication failure stops the request;
+it never falls back to an injected token or local file. Without a configured
+secret, the injected-token and local OAuth options below retain their existing
+behavior. No new grant or app registration is needed for this mode.
 
 ### Option 1: OAuth (Recommended)
 

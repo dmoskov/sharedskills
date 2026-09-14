@@ -3,10 +3,12 @@
 Asana REST API Client for Claude Code.
 
 A self-contained client with 30-second timeouts and automatic retries.
-No external dependencies beyond requests.
+Requires requests; Secrets Manager OAuth additionally requires boto3.
 
 Environment Variables:
-    ASANA_ACCESS_TOKEN: Personal Access Token (required)
+    ASANA_OAUTH_SECRET: Secrets Manager OAuth secret (preferred; automatic refresh)
+    ASANA_ACCESS_TOKEN: Injected access token (legacy; no automatic refresh)
+    SECRETS_REGION: Secret region override (otherwise AWS_REGION or us-west-2)
     ASANA_WORKSPACE: Default workspace GID (optional)
 
 Usage as CLI:
@@ -91,11 +93,21 @@ class AsanaClient:
         Initialize client.
 
         Args:
-            token: Access token. If not provided, checks ASANA_ACCESS_TOKEN env var,
-                   then falls back to OAuth tokens in ~/.config/asana/tokens.json
+            token: Explicit access token, overriding other sources. Otherwise uses
+                   ASANA_OAUTH_SECRET, then ASANA_ACCESS_TOKEN, then local OAuth
+                   tokens in ~/.config/asana/tokens.json. Configured-secret errors
+                   are fatal and never fall back to another token source.
             workspace: Default workspace GID. If not provided, uses ASANA_WORKSPACE env var.
         """
-        self._token = token or os.environ.get("ASANA_ACCESS_TOKEN") or self._load_oauth_token()
+        self._oauth_token_manager = None
+        self._oauth_secret = os.environ.get("ASANA_OAUTH_SECRET")
+        if not token and self._oauth_secret:
+            from asana_sdk.token_manager import TokenManager
+
+            self._oauth_token_manager = TokenManager()
+            self._token = self._resolve_secret_token()
+        else:
+            self._token = token or os.environ.get("ASANA_ACCESS_TOKEN") or self._load_oauth_token()
         self._workspace = workspace or os.environ.get("ASANA_WORKSPACE")
         self._session = requests.Session()
         self._session.headers["Accept"] = "application/json"
@@ -104,10 +116,20 @@ class AsanaClient:
             raise AsanaAuthError(
                 "No Asana token provided.\n"
                 "Options:\n"
-                "  1. Run: python3 oauth_setup.py  (recommended)\n"
+                "  1. Set ASANA_OAUTH_SECRET for Secrets Manager OAuth\n"
                 "  2. Set ASANA_ACCESS_TOKEN environment variable\n"
-                "  3. Pass token to constructor"
+                "  3. Pass token to constructor\n"
+                "  4. Run: python3 oauth_setup.py for local OAuth"
             )
+
+    def _resolve_secret_token(self) -> str:
+        """Resolve the configured OAuth secret without a static or file fallback."""
+        from asana_sdk.errors import AsanaAuthenticationError
+
+        try:
+            return self._oauth_token_manager._get_token_from_secrets_manager(self._oauth_secret)
+        except AsanaAuthenticationError as error:
+            raise AsanaAuthError(str(error)) from error
 
     def _load_oauth_token(self) -> Optional[str]:
         """Load OAuth token from ~/.config/asana/tokens.json if available."""
@@ -190,6 +212,8 @@ class AsanaClient:
         retries: int = MAX_RETRIES,
     ) -> Dict[str, Any]:
         """Make authenticated request with retry logic."""
+        if self._oauth_token_manager is not None:
+            self._token = self._resolve_secret_token()
         headers = {"Authorization": f"Bearer {self._token}"}
         url = f"{ASANA_BASE_URL}/{endpoint}"
 

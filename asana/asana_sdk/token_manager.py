@@ -93,8 +93,8 @@ class TokenManager:
         Get a valid access token, refreshing if necessary.
 
         Token resolution order:
-        1. ASANA_ACCESS_TOKEN env var (static token - legacy)
-        2. ASANA_OAUTH_SECRET env var (Secrets Manager ARN with OAuth credentials for auto-refresh)
+        1. ASANA_OAUTH_SECRET env var (Secrets Manager OAuth credentials with auto-refresh)
+        2. ASANA_ACCESS_TOKEN env var (static token - legacy)
         3. Local token file
 
         For ECS/remote execution, set ASANA_OAUTH_SECRET to enable auto-refresh.
@@ -528,7 +528,7 @@ class TokenManager:
         logger.debug(f"Loading OAuth credentials from Secrets Manager: {secret_arn}")
 
         region = os.environ.get("SECRETS_REGION") or os.environ.get(
-            "AWS_REGION", "us-west-1"
+            "AWS_REGION", "us-west-2"
         )
         client = boto3.client("secretsmanager", region_name=region)
 
