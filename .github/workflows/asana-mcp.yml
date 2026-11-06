@@ -1,0 +1,117 @@
+name: Asana MCP server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "asana/mcp_server/**"
+      - "asana/asana_client.py"
+      - "asana/asana_to_markdown.py"
+      - "asana/markdown_to_asana.py"
+      - "asana/asana_sdk/**"
+      - ".github/workflows/asana-mcp.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "asana/mcp_server/**"
+      - "asana/asana_client.py"
+      - "asana/asana_to_markdown.py"
+      - "asana/markdown_to_asana.py"
+      - "asana/asana_sdk/**"
+      - ".github/workflows/asana-mcp.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r asana/mcp_server/requirements.txt pytest pytest-asyncio
+
+      - name: Run server tests
+        working-directory: asana/mcp_server
+        run: python -m pytest tests -q
+
+      - name: Build image
+        working-directory: asana
+        run: docker build --platform linux/amd64 -f mcp_server/Dockerfile -t asana-mcp:ci .
+
+  # Deploys only when the deployment's repo variables are set (Settings → Variables):
+  # ASANA_MCP_AWS_ROLE_ARN, ASANA_MCP_AWS_REGION, ASANA_MCP_ECR_REPOSITORY,
+  # ASANA_MCP_ECS_CLUSTER, ASANA_MCP_ECS_SERVICE.
+  deploy:
+    name: Deploy
+    needs: test
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.ASANA_MCP_AWS_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: asana-mcp-deploy
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.ASANA_MCP_AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ASANA_MCP_ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.ASANA_MCP_ECS_CLUSTER }}
+      ECS_SERVICE: ${{ vars.ASANA_MCP_ECS_SERVICE }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.ASANA_MCP_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.ASANA_MCP_AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        working-directory: asana
+        env:
+          IMAGE: ${{ steps.ecr-login.outputs.registry }}/${{ vars.ASANA_MCP_ECR_REPOSITORY }}
+        run: |
+          docker build --platform linux/amd64 -f mcp_server/Dockerfile \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy new task definition
+        env:
+          IMAGE: ${{ steps.ecr-login.outputs.registry }}/${{ vars.ASANA_MCP_ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          CURRENT=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$CURRENT" --query taskDefinition --output json \
+            | jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                      .compatibilities, .registeredAt, .registeredBy)' > taskdef.json
+          NEW=$(aws ecs register-task-definition --cli-input-json file://taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+            --task-definition "$NEW" --force-new-deployment > /dev/null
+          echo "Deployed $NEW"
+
+      - name: Wait for service to stabilize
+        run: |
+          DESIRED=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" \
+            --query 'services[0].desiredCount' --output text)
+          if [ "$DESIRED" = "0" ]; then
+            echo "::notice::Service desired count is 0; image registered but nothing to roll out."
+            exit 0
+          fi
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
