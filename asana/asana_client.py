@@ -568,6 +568,7 @@ class AsanaClient:
         notes: str = None,
         custom_fields: Optional[Dict[str, Any]] = None,
         projects: Optional[List[str]] = None,
+        html_notes: str = None,
     ) -> Dict[str, Any]:
         """
         Create a subtask.
@@ -578,6 +579,7 @@ class AsanaClient:
             assignee: User GID or 'me'
             due_on: Due date in YYYY-MM-DD format
             notes: Plain text description
+            html_notes: Rich text description (use instead of notes, not both)
             custom_fields: Dict mapping custom field GIDs to values
             projects: Project GIDs to multi-home the subtask into.
                 Subtasks do NOT inherit the parent's projects, so pass these
@@ -590,6 +592,8 @@ class AsanaClient:
             data["due_on"] = due_on
         if notes:
             data["notes"] = notes
+        if html_notes:
+            data["html_notes"] = html_notes
         if custom_fields:
             data["custom_fields"] = custom_fields
         if projects:
@@ -761,6 +765,24 @@ class AsanaClient:
         """Get current user info."""
         result = self._request("GET", "users/me", {"opt_fields": "name,email,workspaces.name"})
         return result.get("data", {})
+
+    def typeahead(
+        self,
+        query: str,
+        resource_type: str = "user",
+        workspace: str = None,
+        count: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Fuzzy-find users, projects, tags, tasks, portfolios, goals, or teams by name."""
+        params = {
+            "resource_type": resource_type,
+            "query": query,
+            "count": str(min(count, 100)),
+            "opt_fields": "name,email" if resource_type == "user" else "name",
+        }
+        ws = self._get_workspace(workspace)
+        result = self._request("GET", f"workspaces/{ws}/typeahead", params)
+        return result.get("data", [])
 
     # ========== Portfolio Operations ==========
 

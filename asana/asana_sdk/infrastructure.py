@@ -14,6 +14,8 @@ import inspect
 import json
 import os
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
@@ -53,6 +55,31 @@ except ImportError:
     ApiException = Exception  # Fallback to base Exception class
     ASANA_SDK_AVAILABLE = False
     logger.debug("Asana SDK not available. Install with: pip install asana")
+
+
+# ============================================================================
+# Per-request token override (multi-user servers)
+# ============================================================================
+
+_access_token_override: ContextVar[Optional[str]] = ContextVar(
+    "asana_access_token_override", default=None
+)
+
+
+@contextmanager
+def use_access_token(access_token: str):
+    """Route SDK calls made in this context through ``access_token``.
+
+    Multi-user servers (e.g. the MCP server) wrap each request in this so SDK
+    calls act as the calling user instead of the configured token source.
+    """
+    if not access_token:
+        raise AsanaAuthenticationError("use_access_token() requires a non-empty access token")
+    reset_token = _access_token_override.set(access_token)
+    try:
+        yield
+    finally:
+        _access_token_override.reset(reset_token)
 
 
 # ============================================================================
@@ -298,8 +325,15 @@ class AsanaClientSingleton:
                 "Asana SDK not available. Install with: pip install asana"
             )
 
-        config = get_config()
-        access_token = config.token_manager.get_valid_token()
+        access_token = _access_token_override.get()
+        if access_token is None:
+            if os.environ.get("ASANA_SDK_REQUIRE_TOKEN_OVERRIDE"):
+                raise AsanaAuthenticationError(
+                    "No per-request Asana token is set and ASANA_SDK_REQUIRE_TOKEN_OVERRIDE "
+                    "is on; refusing to fall back to the configured token source. "
+                    "Wrap the call in asana_sdk.use_access_token(token)."
+                )
+            access_token = get_config().token_manager.get_valid_token()
 
         # Create configuration with token (v5.x API)
         configuration = asana.Configuration()
@@ -340,6 +374,13 @@ def handle_api_exception(e: "ApiException", operation: str) -> None:
         error_msg = str(e)
 
     config = get_config()
+
+    if status == 401 and _access_token_override.get() is not None:
+        # The caller supplied this token; refreshing the configured token source
+        # would be wrong (and could act as a different identity).
+        raise AsanaAuthenticationError(
+            f"Asana rejected the caller's token during {operation}: {error_msg}"
+        )
 
     if status == 401:
         # Try to refresh token
