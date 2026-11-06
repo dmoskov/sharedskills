@@ -29,12 +29,12 @@ def anyio_backend():
 
 @pytest.fixture(autouse=True)
 def workspace(monkeypatch):
-    monkeypatch.setenv("ASANA_WORKSPACE", "19421316985")
+    monkeypatch.setenv("ASANA_WORKSPACE", "1000000001")
 
 
 @pytest.fixture
 def signed_in(monkeypatch):
-    monkeypatch.setattr(server, "get_access_token", lambda: SimpleNamespace(token="tok-dustin"))
+    monkeypatch.setattr(server, "get_access_token", lambda: SimpleNamespace(token="tok-alice"))
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ async def test_create_task_converts_markdown_and_runs_as_caller(signed_in, asana
     task = await call("create_task", {"name": "Buy milk", "project_gid": "222", "notes": "## Why\n- **now**"})
 
     post = asana_calls.calls[0]
-    assert post["token"] == "tok-dustin"
+    assert post["token"] == "tok-alice"
     assert post["method"] == "POST" and post["endpoint"] == "tasks"
     body = post["json"]["data"]
     assert "notes" not in body
@@ -106,12 +106,12 @@ async def test_get_task_returns_markdown_description(signed_in, asana_calls):
 
 
 async def test_list_tasks_project_and_assignee_uses_search(signed_in, asana_calls):
-    asana_calls.responses["workspaces/19421316985/tasks/search"] = {"data": [{"gid": "1", "name": "x"}]}
+    asana_calls.responses["workspaces/1000000001/tasks/search"] = {"data": [{"gid": "1", "name": "x"}]}
 
     tasks = await call("list_tasks", {"project_gid": "222", "assignee": "me"})
 
     req = asana_calls.calls[0]
-    assert req["endpoint"] == "workspaces/19421316985/tasks/search"
+    assert req["endpoint"] == "workspaces/1000000001/tasks/search"
     assert req["params"]["projects.any"] == "222"
     assert req["params"]["assignee.any"] == "me"
     assert req["params"]["completed"] == "false"
@@ -125,13 +125,13 @@ async def test_list_tasks_rejects_section_with_assignee(signed_in, asana_calls):
 
 
 async def test_find_uses_typeahead(signed_in, asana_calls):
-    asana_calls.responses["workspaces/19421316985/typeahead"] = {"data": [{"gid": "81", "name": "Cari Tuna"}]}
+    asana_calls.responses["workspaces/1000000001/typeahead"] = {"data": [{"gid": "2002", "name": "Bob Example"}]}
 
-    people = await call("find", {"query": "Cari"})
+    people = await call("find", {"query": "Bob"})
 
     req = asana_calls.calls[0]
-    assert req["params"]["resource_type"] == "user" and req["params"]["query"] == "Cari"
-    assert people[0]["gid"] == "81"
+    assert req["params"]["resource_type"] == "user" and req["params"]["query"] == "Bob"
+    assert people[0]["gid"] == "2002"
 
 
 async def test_tools_refuse_without_session(monkeypatch, asana_calls):
@@ -154,7 +154,7 @@ async def test_sdk_tools_run_with_caller_token(signed_in, monkeypatch):
 
     tasks = await call("overdue_tasks", {"project_gid": "222"})
 
-    assert seen == {"token": "tok-dustin", "project": "222"}
+    assert seen == {"token": "tok-alice", "project": "222"}
     assert tasks[0]["url"].endswith("/7/f")
 
 
@@ -188,13 +188,13 @@ def test_sdk_token_override_is_isolated_per_thread():
             barrier.wait()
             results[name] = asana_sdk.get_client().configuration.access_token
 
-    threads = [threading.Thread(target=worker, args=(n,)) for n in ("dustin", "cari")]
+    threads = [threading.Thread(target=worker, args=(n,)) for n in ("alice", "bob")]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
-    assert results == {"dustin": "tok-dustin", "cari": "tok-cari"}
+    assert results == {"alice": "tok-alice", "bob": "tok-bob"}
 
 
 class _FakeResponse:
@@ -229,25 +229,25 @@ def _fake_httpx(monkeypatch, response):
 
 
 async def test_verifier_accepts_allowlisted_user(monkeypatch):
-    fake = _fake_httpx(monkeypatch, _FakeResponse(200, {"data": {"gid": "81", "name": "Cari Tuna", "email": "cari@sutrogroup.org"}}))
-    verifier = AsanaTokenVerifier(allowed_user_gids={"1204450987777858", "81"})
+    fake = _fake_httpx(monkeypatch, _FakeResponse(200, {"data": {"gid": "2002", "name": "Bob Example", "email": "bob@example.com"}}))
+    verifier = AsanaTokenVerifier(allowed_user_gids={"1001", "2002"})
 
-    access = await verifier.verify_token("tok-cari")
+    access = await verifier.verify_token("tok-bob")
 
-    assert access.subject == "81" and access.token == "tok-cari"
-    assert fake.last_headers["Authorization"] == "Bearer tok-cari"
+    assert access.subject == "2002" and access.token == "tok-bob"
+    assert fake.last_headers["Authorization"] == "Bearer tok-bob"
 
 
 async def test_verifier_rejects_other_workspace_members(monkeypatch):
-    _fake_httpx(monkeypatch, _FakeResponse(200, {"data": {"gid": "1204059442044877", "email": "vendor@example.com"}}))
-    verifier = AsanaTokenVerifier(allowed_user_gids={"1204450987777858", "81"})
+    _fake_httpx(monkeypatch, _FakeResponse(200, {"data": {"gid": "3003", "email": "vendor@example.com"}}))
+    verifier = AsanaTokenVerifier(allowed_user_gids={"1001", "2002"})
 
     assert await verifier.verify_token("tok-vendor") is None
 
 
 async def test_verifier_returns_none_on_expired_token(monkeypatch):
     _fake_httpx(monkeypatch, _FakeResponse(401, {"errors": [{"message": "expired"}]}))
-    verifier = AsanaTokenVerifier(allowed_user_gids={"81"})
+    verifier = AsanaTokenVerifier(allowed_user_gids={"2002"})
 
     assert await verifier.verify_token("tok-old") is None
 
@@ -294,7 +294,7 @@ def test_sdk_401_with_caller_token_does_not_refresh_server_identity(monkeypatch)
     monkeypatch.setattr(infrastructure.get_config().token_manager, "get_valid_token", refuse)
     error = SimpleNamespace(status=401, body='{"errors": [{"message": "token expired"}]}')
 
-    with asana_sdk.use_access_token("tok-cari"):
+    with asana_sdk.use_access_token("tok-bob"):
         with pytest.raises(asana_sdk.AsanaAuthenticationError, match="caller's token"):
             infrastructure.handle_api_exception(error, "get goals")
 
