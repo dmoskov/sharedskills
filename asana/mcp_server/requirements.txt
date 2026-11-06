@@ -1,0 +1,5 @@
+fastmcp==4.1.6
+py-key-value-aio[dynamodb]==0.4.6
+asana==5.5.1
+mistune==3.4.0
+requests==2.34.2
