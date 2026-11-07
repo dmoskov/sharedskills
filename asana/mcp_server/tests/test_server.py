@@ -322,3 +322,161 @@ def test_storage_requires_region_for_dynamodb():
 
     with pytest.raises(ValueError, match="AWS_REGION"):
         build_storage(dynamodb_table="oauth-table", region=None, jwt_signing_key="k" * 48)
+
+
+# ========== File uploads ==========
+
+
+@pytest.fixture
+def uploads(monkeypatch):
+    """Fresh upload-link store, a public base URL, and a recorder for Asana uploads."""
+    from key_value.aio.stores.memory import MemoryStore
+
+    monkeypatch.setattr(server, "_upload_store", MemoryStore())
+    monkeypatch.setenv("MCP_BASE_URL", "https://mcp.example.com")
+    uploaded = []
+
+    def fake_upload(task_gid, file_content=None, file_name=None, content_type=None):
+        uploaded.append(
+            {
+                "token": asana_sdk.get_client().configuration.access_token,
+                "task": task_gid,
+                "content": file_content,
+                "name": file_name,
+                "content_type": content_type,
+            }
+        )
+        return {"gid": "att9", "name": file_name}
+
+    monkeypatch.setattr(asana_sdk, "upload_attachment_to_task", fake_upload)
+    return uploaded
+
+
+def _http():
+    import httpx2
+
+    return httpx2.AsyncClient(transport=httpx2.ASGITransport(app=server.mcp.http_app()), base_url="https://mcp.example.com")
+
+
+async def _upload_link(**args):
+    link = await call("get_upload_link", {"task_gid": "111", "file_name": "photo.jpg", **args})
+    assert link["upload_url"].startswith("https://mcp.example.com/uploads/")
+    return link["upload_url"].removeprefix("https://mcp.example.com")
+
+
+async def test_upload_link_attaches_bytes_as_the_caller_once(signed_in, uploads):
+    path = await _upload_link()
+
+    async with _http() as http:
+        first = await http.put(path, content=b"\xff\xd8 jpeg bytes")
+        second = await http.put(path, content=b"again")
+
+    assert first.status_code == 200 and first.json() == {"gid": "att9", "name": "photo.jpg"}
+    assert uploads == [
+        {"token": "tok-alice", "task": "111", "content": b"\xff\xd8 jpeg bytes", "name": "photo.jpg", "content_type": None}
+    ]
+    assert second.status_code == 404 and second.json()["error"] == "upload_link_invalid"
+
+
+async def test_upload_link_passes_declared_content_type(signed_in, uploads):
+    path = await _upload_link(content_type="image/heic")
+
+    async with _http() as http:
+        await http.put(path, content=b"heic")
+
+    assert uploads[0]["content_type"] == "image/heic"
+
+
+async def test_unknown_upload_link_is_rejected(uploads):
+    async with _http() as http:
+        response = await http.put("/uploads/not-a-real-link", content=b"x")
+
+    assert response.status_code == 404
+    assert uploads == []
+
+
+async def test_expired_upload_link_is_rejected(signed_in, uploads, monkeypatch):
+    path = await _upload_link()
+    monkeypatch.setattr(server.time, "time", lambda: 10**12)
+
+    async with _http() as http:
+        response = await http.put(path, content=b"late")
+
+    assert response.status_code == 404
+    assert uploads == []
+
+
+async def test_empty_upload_keeps_the_link_usable(signed_in, uploads):
+    path = await _upload_link()
+
+    async with _http() as http:
+        empty = await http.put(path, content=b"")
+        real = await http.put(path, content=b"bytes")
+
+    assert empty.status_code == 400
+    assert real.status_code == 200 and len(uploads) == 1
+
+
+async def test_upload_over_the_limit_is_rejected(signed_in, uploads, monkeypatch):
+    monkeypatch.setenv("ASANA_MCP_MAX_UPLOAD_MB", "1")
+    path = await _upload_link()
+
+    async with _http() as http:
+        response = await http.put(path, content=b"x" * (1024 * 1024 + 1))
+
+    assert response.status_code == 413
+    assert uploads == []
+
+
+async def test_upload_reports_asana_failure(signed_in, uploads, monkeypatch):
+    def failing_upload(*args, **kwargs):
+        raise RuntimeError("Asana said no")
+
+    monkeypatch.setattr(asana_sdk, "upload_attachment_to_task", failing_upload)
+    path = await _upload_link()
+
+    async with _http() as http:
+        response = await http.put(path, content=b"bytes")
+
+    assert response.status_code == 502
+    assert "Asana said no" in response.json()["error_description"]
+
+
+async def test_upload_link_requires_a_session(uploads, monkeypatch):
+    monkeypatch.setattr(server, "get_access_token", lambda: None)
+
+    with pytest.raises(ToolError, match="Reconnect"):
+        await call("get_upload_link", {"task_gid": "111", "file_name": "photo.jpg"})
+
+
+@pytest.mark.parametrize("name", ["../photo.jpg", "dir/photo.jpg", "a\\b.jpg", "..", "  "])
+async def test_file_names_with_paths_are_rejected(signed_in, uploads, name):
+    with pytest.raises(ToolError, match="Invalid file name"):
+        await call("get_upload_link", {"task_gid": "111", "file_name": name})
+    with pytest.raises(ToolError, match="Invalid file name"):
+        await call("attach_file", {"task_gid": "111", "file_name": name, "content": "hi"})
+
+
+async def test_attach_file_from_url_uses_url_name_and_content_type(signed_in, uploads, monkeypatch):
+    from fastmcp.server.auth.ssrf import SSRFFetchResponse
+
+    fetched = {}
+
+    async def fake_fetch(url, **kwargs):
+        fetched.update(url=url, max_size=kwargs["max_size"])
+        return SSRFFetchResponse(content=b"png", status_code=200, headers={"Content-Type": "image/png; charset=binary"})
+
+    monkeypatch.setattr(server, "ssrf_safe_fetch_response", fake_fetch)
+
+    await call("attach_file_from_url", {"task_gid": "111", "url": "https://cdn.example.com/a/My%20Chart.png?x=1"})
+
+    assert fetched == {"url": "https://cdn.example.com/a/My%20Chart.png?x=1", "max_size": 50 * 1024 * 1024}
+    assert uploads == [{"token": "tok-alice", "task": "111", "content": b"png", "name": "My Chart.png", "content_type": "image/png"}]
+
+
+async def test_attach_file_from_url_refuses_internal_addresses(signed_in, uploads):
+    with pytest.raises(ToolError, match="URL not allowed"):
+        await call("attach_file_from_url", {"task_gid": "111", "url": "https://169.254.170.2/v2/credentials/x.json"})
+    with pytest.raises(ToolError, match="URL not allowed"):
+        await call("attach_file_from_url", {"task_gid": "111", "url": "http://example.com/a.png"})
+    assert uploads == []
