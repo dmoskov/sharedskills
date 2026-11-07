@@ -9,13 +9,23 @@ Run:  python server.py        (reads config from the environment; see README.md)
 from __future__ import annotations
 
 import base64
+import json
+import logging
 import os
+import secrets
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
+from urllib.parse import unquote, urlparse
 
+import anyio
+from key_value.aio.protocols import AsyncKeyValue
+from key_value.aio.stores.memory import MemoryStore
 from pydantic import Field
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 LIB_DIR = Path(__file__).resolve().parent.parent
 if str(LIB_DIR) not in sys.path:
@@ -30,7 +40,10 @@ from asana_to_markdown import asana_html_to_markdown  # noqa: E402
 from markdown_to_asana import markdown_to_asana_html  # noqa: E402
 from fastmcp import FastMCP  # noqa: E402
 from fastmcp.exceptions import ToolError  # noqa: E402
+from fastmcp.server.auth.ssrf import SSRFError, SSRFFetchError, ssrf_safe_fetch_response  # noqa: E402
 from fastmcp.server.dependencies import get_access_token  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 READ = {"readOnlyHint": True, "openWorldHint": True}
 WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
@@ -49,6 +62,8 @@ Asana, acting as the signed-in person in their default workspace.
 - Descriptions and comments default to markdown and are converted to Asana rich text;
   task descriptions come back as markdown.
 - Dates are YYYY-MM-DD. Every task result includes a `url` to open it in Asana.
+- To attach photos, PDFs or other real files, use `get_upload_link` and upload the file
+  from a shell, or `attach_file_from_url`. `attach_file` is only for small text content.
 """
 
 
@@ -643,20 +658,162 @@ def get_attachment(attachment_gid: Gid) -> dict:
         return asana_sdk.get_attachment(attachment_gid)
 
 
+FileName = Annotated[str, Field(description="Name in Asana, with the extension, e.g. notes.md or photo.jpg")]
+
+UPLOAD_COLLECTION = "asana_mcp_uploads"
+UPLOAD_TTL_SECONDS = 15 * 60
+
+# Pending upload links. main() swaps in the encrypted OAuth store when one is configured,
+# so links survive restarts and work across replicas.
+_upload_store: AsyncKeyValue = MemoryStore()
+
+
+def set_upload_store(store: AsyncKeyValue) -> None:
+    global _upload_store
+    _upload_store = store
+
+
+def _max_upload_bytes() -> int:
+    return int(os.environ.get("ASANA_MCP_MAX_UPLOAD_MB", "50")) * 1024 * 1024
+
+
+def _safe_file_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned or cleaned in {".", ".."} or "/" in cleaned or "\\" in cleaned or "\x00" in cleaned:
+        raise ToolError(f"Invalid file name {name!r}: give a bare name like photo.jpg, without folders")
+    return cleaned
+
+
+def _upload_as(token: str, task_gid: str, data: bytes, file_name: str, content_type: Optional[str]) -> dict:
+    with asana_sdk.use_access_token(token):
+        return asana_sdk.upload_attachment_to_task(
+            task_gid, file_content=data, file_name=file_name, content_type=content_type
+        )
+
+
 @mcp.tool(annotations=WRITE)
 def attach_file(
     task_gid: Gid,
-    file_name: Annotated[str, Field(description="Include the extension, e.g. notes.md or photo.jpg")],
+    file_name: FileName,
     content: str,
     encoding: Literal["text", "base64"] = "text",
     content_type: Optional[str] = None,
 ) -> dict:
-    """Attach a file to a task from text or base64 content."""
+    """Attach a small file whose content you type into this call (text or base64).
+
+    Not for photos, PDFs or anything over a few KB: use get_upload_link or
+    attach_file_from_url instead.
+    """
+    name = _safe_file_name(file_name)
     data = base64.b64decode(content, validate=True) if encoding == "base64" else content.encode("utf-8")
-    with _sdk():
-        return asana_sdk.upload_attachment_to_task(
-            task_gid, file_content=data, file_name=file_name, content_type=content_type
+    return _upload_as(_user_token(), task_gid, data, name, content_type)
+
+
+@mcp.tool(annotations=WRITE)
+async def get_upload_link(
+    task_gid: Gid,
+    file_name: FileName,
+    content_type: Annotated[Optional[str], Field(description="MIME type; guessed from file_name if omitted")] = None,
+) -> dict:
+    """One-time link for attaching a file of any size (photos, PDFs, videos) to a task.
+
+    Send the raw file bytes to `upload_url` with HTTP PUT from a shell, e.g.
+    `curl --fail-with-body -T /path/to/photo.jpg '<upload_url>'`. The response is the new
+    attachment. The link works once and expires after 15 minutes.
+    """
+    name = _safe_file_name(file_name)
+    base_url = os.environ.get("MCP_BASE_URL")
+    if not base_url:
+        raise ToolError("Server misconfigured: MCP_BASE_URL is not set")
+    upload_id = secrets.token_urlsafe(32)
+    await _upload_store.put(
+        key=upload_id,
+        value={
+            "asana_token": _user_token(),
+            "task_gid": task_gid,
+            "file_name": name,
+            "content_type": content_type,
+            "expires_at": time.time() + UPLOAD_TTL_SECONDS,
+        },
+        collection=UPLOAD_COLLECTION,
+        ttl=UPLOAD_TTL_SECONDS,
+    )
+    upload_url = f"{base_url.rstrip('/')}/uploads/{upload_id}"
+    return {
+        "upload_url": upload_url,
+        "method": "PUT",
+        "curl": f"curl --fail-with-body -T <path-to-file> '{upload_url}'",
+        "expires_in_seconds": UPLOAD_TTL_SECONDS,
+        "max_bytes": _max_upload_bytes(),
+    }
+
+
+def _upload_error(status: int, error: str, description: str) -> JSONResponse:
+    return JSONResponse({"error": error, "error_description": description}, status_code=status)
+
+
+@mcp.custom_route("/uploads/{upload_id}", methods=["PUT", "POST"], include_in_schema=False)
+async def receive_upload(request: Request) -> Response:
+    """Receive the bytes for a get_upload_link link and attach them as the link's owner."""
+    upload_id = request.path_params["upload_id"]
+    record = await _upload_store.get(key=upload_id, collection=UPLOAD_COLLECTION)
+    if record is None or record["expires_at"] < time.time():
+        return _upload_error(
+            404, "upload_link_invalid", "This upload link is unknown, used, or expired. Get a new one with get_upload_link."
         )
+
+    limit = _max_upload_bytes()
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        return _upload_error(413, "file_too_large", f"The file is {declared} bytes; the limit is {limit} bytes.")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            return _upload_error(413, "file_too_large", f"The file is over the {limit}-byte limit.")
+        chunks.append(chunk)
+    if size == 0:
+        return _upload_error(400, "empty_body", "No file bytes received. Send the file, e.g. curl -T photo.jpg '<link>'.")
+
+    # Deleting first makes the link single-use even if two uploads race.
+    if not await _upload_store.delete(key=upload_id, collection=UPLOAD_COLLECTION):
+        return _upload_error(404, "upload_link_invalid", "This upload link was already used.")
+    try:
+        attachment = await anyio.to_thread.run_sync(
+            _upload_as, record["asana_token"], record["task_gid"], b"".join(chunks), record["file_name"], record["content_type"]
+        )
+    except Exception as e:
+        logger.exception("Upload of %s to Asana task %s failed", record["file_name"], record["task_gid"])
+        return _upload_error(502, "asana_upload_failed", f"Asana rejected the upload: {e}")
+    return Response(json.dumps(attachment, default=str), media_type="application/json")
+
+
+def _file_name_from_url(url: str) -> str:
+    name = unquote(Path(urlparse(url).path).name)
+    if not name:
+        raise ToolError(f"Can't tell the file name from {url}; pass file_name")
+    return name
+
+
+@mcp.tool(annotations=WRITE)
+async def attach_file_from_url(
+    task_gid: Gid,
+    url: Annotated[str, Field(description="Public https URL of the file itself; redirects are not followed")],
+    file_name: Annotated[Optional[str], Field(description="Name in Asana; defaults to the URL's file name")] = None,
+) -> dict:
+    """Download a file from a public https URL and attach it to a task."""
+    token = _user_token()
+    name = _safe_file_name(file_name or _file_name_from_url(url))
+    try:
+        response = await ssrf_safe_fetch_response(url, max_size=_max_upload_bytes(), timeout=20.0, overall_timeout=120.0)
+    except SSRFError as e:
+        raise ToolError(f"URL not allowed ({e}). Only public https URLs work.") from e
+    except SSRFFetchError as e:
+        raise ToolError(f"Could not download {url}: {e}") from e
+    headers = {k.lower(): v for k, v in response.headers.items()}
+    content_type = headers.get("content-type", "").split(";")[0].strip() or None
+    return await anyio.to_thread.run_sync(_upload_as, token, task_gid, response.content, name, content_type)
 
 
 # ========== Entry point ==========
@@ -675,17 +832,20 @@ def build_auth():
     allowed = {gid.strip() for gid in _required_env("ASANA_MCP_ALLOWED_USERS").split(",") if gid.strip()}
     redirect_uris = os.environ.get("ASANA_MCP_CLIENT_REDIRECT_URIS")
     jwt_signing_key = _required_env("MCP_JWT_SIGNING_KEY")
+    storage = build_storage(
+        dynamodb_table=os.environ.get("MCP_STORAGE_DYNAMODB_TABLE"),
+        region=os.environ.get("AWS_REGION"),
+        jwt_signing_key=jwt_signing_key,
+    )
+    if storage is not None:
+        set_upload_store(storage)
     return AsanaProvider(
         client_id=_required_env("ASANA_OAUTH_CLIENT_ID"),
         client_secret=_required_env("ASANA_OAUTH_CLIENT_SECRET"),
         base_url=_required_env("MCP_BASE_URL"),
         allowed_user_gids=allowed,
         jwt_signing_key=jwt_signing_key,
-        client_storage=build_storage(
-            dynamodb_table=os.environ.get("MCP_STORAGE_DYNAMODB_TABLE"),
-            region=os.environ.get("AWS_REGION"),
-            jwt_signing_key=jwt_signing_key,
-        ),
+        client_storage=storage,
         allowed_client_redirect_uris=redirect_uris.split(",") if redirect_uris else None,
     )
 
