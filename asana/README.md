@@ -145,6 +145,11 @@ asana my-tasks -i
 | `create <name> --parent <gid>` | Create a subtask (not added to a project) |
 | `update <gid> [options]` | Update a task |
 | `comment <gid> <text>` | Add comment to task |
+| `followers add\|rm <gid> <user>...` | Add or remove task followers (`me`, email, or GID) |
+| `inbox [-l N] [--offset T]` | List unarchived Inbox notifications |
+| `inbox read\|unread <gid>...` | Mark notifications read, or unread (unread also unarchives) |
+
+Asana's public API has no archive action for Inbox notifications.
 
 ## Examples
 

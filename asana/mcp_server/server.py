@@ -302,6 +302,9 @@ def create_task(
         Optional[dict[str, Any]],
         Field(description="Map of custom field GID -> value (enum option GID, number, or text)"),
     ] = None,
+    remove_me_as_follower: Annotated[
+        bool, Field(description="Asana makes the creator a follower; set true to drop the signed-in user afterwards")
+    ] = False,
 ) -> dict:
     """Create a task in a project/section, or a subtask with parent_gid (project_gid then also lists it on that project)."""
     plain, html = _rich(notes, notes_format)
@@ -333,6 +336,9 @@ def create_task(
             html_notes=html,
             custom_fields=custom_fields,
         )
+    if remove_me_as_follower and task.get("gid"):
+        client.remove_followers(task["gid"], ["me"])
+        task["removed_followers"] = ["me"]
     return _with_url(task)
 
 
@@ -415,6 +421,23 @@ def remove_task_from_project(task_gid: Gid, project_gid: Gid) -> dict:
     return {"task": task_gid, "removed_from_project": project_gid}
 
 
+Users = Annotated[list[str], Field(min_length=1, description='Each "me", an email, or a user GID')]
+
+
+@mcp.tool(annotations=WRITE)
+def add_followers(task_gid: Gid, followers: Users) -> dict:
+    """Make people followers of a task so they get its notifications."""
+    task = _client().add_followers(task_gid, followers)
+    return {"task": task_gid, "followers": task.get("followers", [])}
+
+
+@mcp.tool(annotations=WRITE)
+def remove_followers(task_gid: Gid, followers: Users) -> dict:
+    """Stop people following a task (e.g. drop the creator). People not following are ignored."""
+    task = _client().remove_followers(task_gid, followers)
+    return {"task": task_gid, "followers": task.get("followers", [])}
+
+
 @mcp.tool(annotations=READ)
 def overdue_tasks(project_gid: Gid) -> list[dict]:
     """Incomplete tasks in a project whose due date has passed."""
@@ -454,6 +477,39 @@ def delete_comment(story_gid: Gid) -> dict:
     with _sdk():
         asana_sdk.delete_story(story_gid)
     return {"deleted": story_gid}
+
+
+# ========== Inbox ==========
+
+NotificationGids = Annotated[list[str], Field(min_length=1, description="Notification GIDs from get_notifications")]
+
+
+@mcp.tool(annotations=READ)
+def get_notifications(
+    limit: Limit = 50,
+    offset: Annotated[Optional[str], Field(description="next_offset from a previous call")] = None,
+) -> dict:
+    """The signed-in user's Inbox, newest first: only unarchived notifications (Asana's API can't list or set archived)."""
+    page = _client().get_notifications(limit=limit, offset=offset)
+    for n in page["notifications"]:
+        for obj in n.get("work_objects") or []:
+            if obj.get("resource_type") == "task" and obj.get("gid"):
+                obj["url"] = _task_url(obj["gid"])
+    return page
+
+
+@mcp.tool(annotations=WRITE)
+def mark_notifications_read(notification_gids: NotificationGids) -> dict:
+    """Mark Inbox notifications read. Asana's API has no archive action; this is the closest it allows."""
+    failed = _client().mark_notifications_read(notification_gids)
+    return {"marked_read": len(set(notification_gids)) - len(failed), "failed_gids": failed}
+
+
+@mcp.tool(annotations=WRITE)
+def mark_notifications_unread(notification_gids: NotificationGids) -> dict:
+    """Mark notifications unread. An archived notification also returns to the top of the Inbox."""
+    failed = _client().mark_notifications_unread(notification_gids)
+    return {"marked_unread": len(set(notification_gids)) - len(failed), "failed_gids": failed}
 
 
 # ========== Dependencies ==========

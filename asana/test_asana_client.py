@@ -1699,3 +1699,72 @@ class TestCLIIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestFollowersAndInbox:
+    """Tests for task followers and Inbox notifications."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            return AsanaClient(workspace="test_ws")
+
+    def test_remove_followers(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "t1", "followers": []}}) as req:
+            task = client.remove_followers("t1", ["me"])
+        req.assert_called_once_with(
+            "POST", "tasks/t1/removeFollowers", json_data={"data": {"followers": ["me"]}}
+        )
+        assert task["gid"] == "t1"
+
+    def test_add_followers(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "t1"}}) as req:
+            client.add_followers("t1", ["u1", "u2"])
+        req.assert_called_once_with(
+            "POST", "tasks/t1/addFollowers", json_data={"data": {"followers": ["u1", "u2"]}}
+        )
+
+    def test_followers_must_be_non_empty(self, client):
+        with pytest.raises(ValueError):
+            client.remove_followers("t1", [])
+
+    def test_get_notifications(self, client):
+        response = {"data": [{"gid": "n1", "is_read": False}], "next_page": {"offset": "tok2"}}
+        with patch.object(client, "_request", return_value=response) as req:
+            page = client.get_notifications(limit=10, offset="tok1")
+        method, endpoint, params = req.call_args[0]
+        assert (method, endpoint) == ("GET", "users/me/notifications")
+        assert params["workspace"] == "test_ws"
+        assert params["limit"] == "10" and params["offset"] == "tok1"
+        assert "work_objects.name" in params["opt_fields"]
+        assert page == {"notifications": [{"gid": "n1", "is_read": False}], "next_offset": "tok2"}
+
+    def test_get_notifications_last_page(self, client):
+        with patch.object(client, "_request", return_value={"data": [], "next_page": None}):
+            assert client.get_notifications()["next_offset"] is None
+
+    def test_get_notifications_rejects_bad_limit(self, client):
+        with pytest.raises(ValueError):
+            client.get_notifications(limit=101)
+
+    def test_mark_read_batches_and_collects_failures(self, client):
+        gids = [f"n{i}" for i in range(60)] + ["n0"]
+        responses = [{"data": {"failed_gids": ["n3"]}}, {"data": {"failed_gids": []}}]
+        with patch.object(client, "_request", side_effect=responses) as req:
+            failed = client.mark_notifications_read(gids)
+        assert failed == ["n3"]
+        assert req.call_count == 2
+        first, second = req.call_args_list
+        assert first[0][:2] == ("POST", "users/me/notifications/markRead")
+        assert first[1]["json_data"]["data"]["workspace"] == "test_ws"
+        assert len(first[1]["json_data"]["data"]["notification_gids"]) == 50
+        assert len(second[1]["json_data"]["data"]["notification_gids"]) == 10
+
+    def test_mark_unread(self, client):
+        with patch.object(client, "_request", return_value={"data": {"failed_gids": []}}) as req:
+            assert client.mark_notifications_unread(["n1"]) == []
+        assert req.call_args[0][1] == "users/me/notifications/markUnread"
+
+    def test_mark_requires_gids(self, client):
+        with pytest.raises(ValueError):
+            client.mark_notifications_read([])

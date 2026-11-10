@@ -20,9 +20,9 @@ asana_client / asana_sdk  ───────────────▶  Asan
 - `asana_auth.py`: `AsanaProvider` sends people through Asana's own login, stores their
   Asana tokens encrypted, refreshes them when the one-hour access token lapses, and lets
   in only the Asana user GIDs listed in `ASANA_MCP_ALLOWED_USERS`.
-- `server.py`: 50 tools covering tasks, subtasks, search, sections, comments,
+- `server.py`: 55 tools covering tasks, subtasks, followers, search, sections, comments,
   dependencies, tags, custom fields, teams, portfolios, project status updates, goals,
-  and attachments. Descriptions and comments take markdown and are converted to Asana
+  attachments, and the Inbox. Descriptions and comments take markdown and are converted to Asana
   rich text; task descriptions come back as markdown; task results include a `url`.
 - File attachments: MCP tool arguments are text, so real files don't go through them.
   `get_upload_link` returns a one-time, 15-minute URL under `/uploads/`; the client PUTs
@@ -31,6 +31,11 @@ asana_client / asana_sdk  ───────────────▶  Asan
   (SSRF-guarded: public IPs only, no redirects). `attach_file` remains for small text.
   The client must be able to reach the server over HTTPS from its shell, e.g. Claude
   Code, or a claude.ai sandbox whose network settings allow the server's domain.
+- Inbox: `get_notifications` lists the caller's unarchived Inbox, and
+  `mark_notifications_read` / `mark_notifications_unread` change read state (unread also
+  unarchives). Asana's public API has no archive action, so these tools can't archive.
+- `create_task(remove_me_as_follower=true)` drops the creator, whom Asana adds as a
+  follower automatically; `remove_followers` does the same for any existing task.
 - The SDK runs in per-request mode (`ASANA_SDK_REQUIRE_TOKEN_OVERRIDE=1`, set by
   `server.py`), so a request can never fall back to a token configured on the server.
 

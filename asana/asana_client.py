@@ -54,6 +54,12 @@ logger = logging.getLogger(__name__)
 ASANA_BASE_URL = "https://app.asana.com/api/1.0"
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
+NOTIFICATION_PAGE_MAX = 100
+NOTIFICATION_MARK_BATCH = 50
+NOTIFICATION_FIELDS = (
+    "created_at,created_by.name,is_read,story_resource_subtype,"
+    "story.text,story.resource_subtype,work_objects.name"
+)
 
 
 class AsanaError(Exception):
@@ -940,6 +946,95 @@ class AsanaClient:
         )
         return result.get("data", {})
 
+    # ========== Follower Operations ==========
+
+    def add_followers(self, task_gid: str, followers: List[str]) -> Dict[str, Any]:
+        """Add followers to a task. Each follower is "me", an email, or a user GID."""
+        if not followers:
+            raise ValueError("followers must be a non-empty list")
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/addFollowers",
+            json_data={"data": {"followers": followers}},
+        )
+        return result.get("data", {})
+
+    def remove_followers(self, task_gid: str, followers: List[str]) -> Dict[str, Any]:
+        """Remove followers from a task. Each follower is "me", an email, or a user GID.
+
+        Users who aren't following are ignored. Returns the updated task.
+        """
+        if not followers:
+            raise ValueError("followers must be a non-empty list")
+        result = self._request(
+            "POST",
+            f"tasks/{task_gid}/removeFollowers",
+            json_data={"data": {"followers": followers}},
+        )
+        return result.get("data", {})
+
+    # ========== Inbox Notification Operations ==========
+
+    def get_notifications(
+        self,
+        user: str = "me",
+        workspace: str = None,
+        limit: int = 50,
+        offset: str = None,
+        opt_fields: str = None,
+    ) -> Dict[str, Any]:
+        """List a user's unarchived Inbox notifications, newest first.
+
+        Asana's API only exposes the active (unarchived) Inbox. Returns
+        {"notifications": [...], "next_offset": str | None}.
+        """
+        if not 1 <= limit <= NOTIFICATION_PAGE_MAX:
+            raise ValueError(f"limit must be between 1 and {NOTIFICATION_PAGE_MAX}")
+        params = {
+            "workspace": self._get_workspace(workspace),
+            "limit": str(limit),
+            "opt_fields": opt_fields or NOTIFICATION_FIELDS,
+        }
+        if offset:
+            params["offset"] = offset
+        result = self._request("GET", f"users/{user}/notifications", params)
+        next_page = result.get("next_page") or {}
+        return {"notifications": result.get("data", []), "next_offset": next_page.get("offset")}
+
+    def mark_notifications_read(
+        self, notification_gids: List[str], user: str = "me", workspace: str = None
+    ) -> List[str]:
+        """Mark Inbox notifications read. Returns the GIDs Asana could not update."""
+        return self._mark_notifications("markRead", notification_gids, user, workspace)
+
+    def mark_notifications_unread(
+        self, notification_gids: List[str], user: str = "me", workspace: str = None
+    ) -> List[str]:
+        """Mark notifications unread; archived ones also return to the top of the Inbox.
+
+        Returns the GIDs Asana could not update.
+        """
+        return self._mark_notifications("markUnread", notification_gids, user, workspace)
+
+    def _mark_notifications(
+        self, action: str, notification_gids: List[str], user: str, workspace: str
+    ) -> List[str]:
+        gids = list(dict.fromkeys(notification_gids or []))
+        if not gids:
+            raise ValueError("notification_gids must be a non-empty list")
+        workspace_gid = self._get_workspace(workspace)
+        failed: List[str] = []
+        for start in range(0, len(gids), NOTIFICATION_MARK_BATCH):
+            batch = gids[start:start + NOTIFICATION_MARK_BATCH]
+            result = self._request(
+                "POST",
+                f"users/{user}/notifications/{action}",
+                params={"opt_fields": "failed_gids"},
+                json_data={"data": {"workspace": workspace_gid, "notification_gids": batch}},
+            )
+            failed.extend((result.get("data") or {}).get("failed_gids") or [])
+        return failed
+
     # ========== Status Update Operations ==========
 
     def create_status_update(
@@ -1593,6 +1688,53 @@ def cmd_remove(client: AsanaClient, args):
         sys.exit(1)
 
 
+def cmd_followers(client: AsanaClient, args):
+    """Add or remove task followers."""
+    if args.followers_action == "add":
+        task = client.add_followers(args.task_gid, args.users)
+    else:
+        task = client.remove_followers(args.task_gid, args.users)
+    if args.json:
+        print(json.dumps(task, indent=2))
+        return
+    verb = "Added" if args.followers_action == "add" else "Removed"
+    print(f"{verb} {len(args.users)} follower(s) on task {args.task_gid}")
+
+
+def cmd_inbox(client: AsanaClient, args):
+    """List Inbox notifications, or mark them read/unread."""
+    action = args.inbox_action or "list"
+    if action == "list":
+        page = client.get_notifications(limit=args.limit, offset=args.offset)
+        if args.json:
+            print(json.dumps(page, indent=2))
+            return
+        for n in page["notifications"]:
+            mark = " " if n.get("is_read") else "*"
+            objects = ", ".join(w.get("name") or w.get("gid", "") for w in n.get("work_objects") or [])
+            who = (n.get("created_by") or {}).get("name") or ""
+            line = f"{mark} {n.get('story_resource_subtype') or ''}: {objects}"
+            if who:
+                line += f" ({who})"
+            if args.verbose:
+                line = f"[{n['gid']}] {line}"
+            print(line)
+        if page["next_offset"]:
+            print(f"More: --offset {page['next_offset']}")
+        return
+    if action == "read":
+        failed = client.mark_notifications_read(args.gids)
+    else:
+        failed = client.mark_notifications_unread(args.gids)
+    if args.json:
+        print(json.dumps({"marked": action, "failed_gids": failed}, indent=2))
+        return
+    print(f"Marked {len(set(args.gids)) - len(failed)} notification(s) {action}")
+    if failed:
+        print(f"Failed: {', '.join(failed)}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_status_update(client: AsanaClient, args):
     """Create or list status updates."""
     if args.status_action == "create":
@@ -1811,6 +1953,9 @@ Examples:
   asana comment <gid> "text"    Add comment to task
   asana move <gid> -s <section> Move task to section
   asana set-parent <gid> -p <parent>  Make task a subtask
+  asana followers rm <gid> me   Stop following a task
+  asana inbox                   List unarchived Inbox notifications
+  asana inbox read <gid>...     Mark notifications read
 
 Environment:
   ASANA_ACCESS_TOKEN   Required. Personal access token.
@@ -2013,6 +2158,23 @@ Environment:
     remove.set_defaults(func=cmd_remove)
 
     # status-update
+    fol = subparsers.add_parser("followers", help="Add or remove task followers")
+    fol_sub = fol.add_subparsers(dest="followers_action", metavar="action", required=True)
+    for name, help_text in (("add", "Add followers"), ("rm", "Remove followers")):
+        p = fol_sub.add_parser(name, help=help_text)
+        p.add_argument("task_gid", help="Task GID")
+        p.add_argument("users", nargs="+", help='"me", email, or user GID')
+    fol.set_defaults(func=cmd_followers)
+
+    inbox = subparsers.add_parser("inbox", help="List Inbox notifications or mark them read/unread")
+    inbox_sub = inbox.add_subparsers(dest="inbox_action", metavar="action")
+    inbox.add_argument("-l", "--limit", type=int, default=50, help="Max notifications (1-100)")
+    inbox.add_argument("--offset", help="Page token from a previous listing")
+    for name, help_text in (("read", "Mark notifications read"), ("unread", "Mark unread (also unarchives)")):
+        p = inbox_sub.add_parser(name, help=help_text)
+        p.add_argument("gids", nargs="+", help="Notification GIDs")
+    inbox.set_defaults(func=cmd_inbox)
+
     su = subparsers.add_parser("status-update", help="Manage status updates")
     su_sub = su.add_subparsers(dest="status_action")
 
