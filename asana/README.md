@@ -146,6 +146,11 @@ asana my-tasks -i
 | `update <gid> [options]` | Update a task |
 | `comment <gid> <text>` | Add comment to task |
 | `followers add\|rm <gid> <user>...` | Add or remove task followers (`me`, email, or GID) |
+| `duplicate <gid> <name> [--include a,b] [--project]` | Copy a task, or a project |
+| `templates -p <project>` / `templates [-t <team>]` | List task templates / project templates |
+| `from-template <gid> [name] [--project]` | Create a task or project from a template |
+| `project-search [text] [-t team] [--owner u]` | Search projects (paid plans) |
+| `ooo`, `ooo add <start> <end>`, `ooo rm <gid>` | Out-of-office entries |
 | `inbox [-l N] [--offset T]` | List unarchived Inbox notifications |
 | `inbox read\|unread <gid>...` | Mark notifications read, or unread (unread also unarchives) |
 

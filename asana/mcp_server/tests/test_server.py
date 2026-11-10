@@ -535,3 +535,125 @@ async def test_mark_notifications_read_reports_failures(signed_in, asana_calls):
     body = asana_calls.calls[0]["json"]["data"]
     assert body == {"workspace": "1000000001", "notification_gids": ["n1", "n2"]}
     assert result == {"marked_read": 1, "failed_gids": ["n2"]}
+
+
+@pytest.fixture
+def no_job_wait(monkeypatch):
+    monkeypatch.setattr(server, "JOB_WAIT_SECONDS", 0)
+
+
+async def test_duplicate_task_returns_the_new_task(signed_in, asana_calls):
+    asana_calls.responses["tasks/111/duplicate"] = {
+        "data": {"gid": "900", "status": "succeeded", "new_task": {"gid": "112", "name": "Copy"}}
+    }
+
+    result = await call("duplicate_task", {"task_gid": "111", "name": "Copy", "include": ["notes", "subtasks"]})
+
+    assert asana_calls.calls[0]["json"] == {"data": {"name": "Copy", "include": "notes,subtasks"}}
+    assert result["status"] == "succeeded"
+    assert result["new_task"]["url"].endswith("/112/f")
+
+
+async def test_duplicate_task_rejects_unknown_include(signed_in, asana_calls):
+    with pytest.raises(ToolError, match="Unknown include"):
+        await call("duplicate_task", {"task_gid": "111", "name": "Copy", "include": ["all"]})
+    assert asana_calls.calls == []
+
+
+async def test_slow_job_reports_still_running(signed_in, asana_calls, no_job_wait):
+    asana_calls.responses["task_templates/700/instantiateTask"] = {"data": {"gid": "900", "status": "in_progress"}}
+
+    result = await call("create_task_from_template", {"task_template_gid": "700"})
+
+    assert result["status"] == "in_progress" and result["job_gid"] == "900"
+    assert "note" in result and "new_task" not in result
+
+
+async def test_failed_job_raises(signed_in, asana_calls):
+    asana_calls.responses["projects/222/rollup"] = {"data": {"gid": "900", "status": "failed"}}
+
+    with pytest.raises(ToolError, match="failed"):
+        await call("rollup_subtask_dates", {"project_gid": "222"})
+
+
+async def test_rollup_needs_exactly_one_target(signed_in, asana_calls):
+    with pytest.raises(ToolError, match="exactly one"):
+        await call("rollup_subtask_dates", {})
+
+
+async def test_create_project_converts_markdown(signed_in, asana_calls):
+    asana_calls.responses["projects"] = {"data": {"gid": "222", "name": "Plan"}}
+
+    project = await call("create_project", {"name": "Plan", "team_gid": "50", "notes": "**go**", "privacy": "private"})
+
+    body = asana_calls.calls[0]["json"]["data"]
+    assert body["workspace"] == "1000000001" and body["team"] == "50"
+    assert body["privacy_setting"] == "private" and "<strong>go</strong>" in body["html_notes"]
+    assert project["url"] == "https://app.asana.com/0/222"
+
+
+async def test_update_project_requires_a_change(signed_in, asana_calls):
+    with pytest.raises(ToolError, match="No updates"):
+        await call("update_project", {"project_gid": "222"})
+
+
+async def test_create_project_from_template(signed_in, asana_calls):
+    asana_calls.responses["project_templates/800/instantiateProject"] = {
+        "data": {"gid": "900", "status": "succeeded", "new_project": {"gid": "223", "name": "Launch"}}
+    }
+
+    result = await call(
+        "create_project_from_template",
+        {"project_template_gid": "800", "name": "Launch", "dates": {"1": "2030-01-02"}},
+    )
+
+    assert asana_calls.calls[0]["json"]["data"]["requested_dates"] == [{"gid": "1", "value": "2030-01-02"}]
+    assert result["new_project"]["url"] == "https://app.asana.com/0/223"
+
+
+async def test_search_projects(signed_in, asana_calls):
+    asana_calls.responses["workspaces/1000000001/projects/search"] = {"data": [{"gid": "222", "name": "Plan"}]}
+
+    projects = await call("search_projects", {"text": "plan", "owner": "me"})
+
+    params = asana_calls.calls[0]["params"]
+    assert params["text"] == "plan" and params["owner.any"] == "me"
+    assert projects == [{"gid": "222", "name": "Plan"}]
+
+
+async def test_remove_project_members(signed_in, asana_calls):
+    asana_calls.responses["projects/222/removeMembers"] = {"data": {"gid": "222", "members": []}}
+
+    result = await call("remove_project_members", {"project_gid": "222", "members": ["8", "9"]})
+
+    assert asana_calls.calls[0]["json"] == {"data": {"members": "8,9"}}
+    assert result == {"project": "222", "followers": [], "members": []}
+
+
+async def test_update_comment_edits_and_pins(signed_in, asana_calls):
+    await call("update_comment", {"story_gid": "333", "text": "*fixed*", "pinned": True})
+
+    req = asana_calls.calls[0]
+    assert req["method"] == "PUT" and req["endpoint"] == "stories/333"
+    assert "<em>fixed</em>" in req["json"]["data"]["html_text"] and req["json"]["data"]["is_pinned"] is True
+
+
+async def test_like_task(signed_in, asana_calls):
+    asana_calls.responses["tasks/111"] = {"data": {"gid": "111", "liked": True}}
+
+    task = await call("like_task", {"task_gid": "111"})
+
+    assert asana_calls.calls[0]["json"] == {"data": {"liked": True}}
+    assert task["liked"] is True
+
+
+async def test_set_out_of_office_for_caller(signed_in, asana_calls):
+    asana_calls.responses["users/me"] = {"data": {"gid": "7"}}
+    asana_calls.responses["ooo_entries"] = {"data": {"gid": "600", "start_date": "2030-01-02"}}
+
+    entry = await call("set_out_of_office", {"start_date": "2030-01-02", "end_date": "2030-01-05"})
+
+    assert asana_calls.calls[1]["json"]["data"] == {
+        "user": "7", "workspace": "1000000001", "start_date": "2030-01-02", "end_date": "2030-01-05",
+    }
+    assert entry["gid"] == "600"
