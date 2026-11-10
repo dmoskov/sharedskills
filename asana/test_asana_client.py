@@ -1868,17 +1868,45 @@ class TestApiGapCoverage:
 
     def test_project_followers_and_members(self, client):
         with patch.object(client, "_request", return_value={"data": {"gid": "p1"}}) as req:
-            client.add_project_followers("p1", ["me", "u2"])
+            client.add_project_followers("p1", ["u1", "u2"])
             client.remove_project_followers("p1", ["u2"])
             client.add_project_members("p1", ["u3"])
             client.remove_project_members("p1", ["u3"])
         sent = [(c[0][1], c[1]["json_data"]["data"]) for c in req.call_args_list]
         assert sent == [
-            ("projects/p1/addFollowers", {"followers": "me,u2"}),
+            ("projects/p1/addFollowers", {"followers": "u1,u2"}),
             ("projects/p1/removeFollowers", {"followers": "u2"}),
             ("projects/p1/addMembers", {"members": "u3"}),
             ("projects/p1/removeMembers", {"members": "u3"}),
         ]
+
+    def test_project_people_resolve_me_to_a_gid(self, client):
+        responses = [{"data": {"gid": "u9"}}, {"data": {"gid": "p1"}}]
+        with patch.object(client, "_request", side_effect=responses) as req:
+            client.remove_project_members("p1", ["me"])
+        assert req.call_args_list[0][0][1] == "users/me"
+        assert req.call_args_list[1][1]["json_data"] == {"data": {"members": "u9"}}
+
+    def test_project_templates_fall_back_to_teams_in_organizations(self, client):
+        def fake(method, endpoint, params=None, **kwargs):
+            if endpoint == "project_templates" and "workspace" in params:
+                raise AsanaAPIError("API error 400: Not a valid regular workspace. You provided an organization.", 400)
+            if endpoint == "project_templates":
+                return {"data": [{"gid": f"tpl-{params['team']}"}]}
+            return {"data": [{"gid": "team1"}, {"gid": "team2"}]}
+
+        with patch.object(client, "_request", side_effect=fake):
+            assert client.get_project_templates() == [{"gid": "tpl-team1"}, {"gid": "tpl-team2"}]
+
+    def test_project_templates_other_errors_propagate(self, client):
+        with patch.object(client, "_request", side_effect=AsanaAPIError("API error 403: Forbidden", 403)):
+            with pytest.raises(AsanaAPIError):
+                client.get_project_templates()
+
+    def test_notifications_request_work_object_type(self, client):
+        with patch.object(client, "_request", return_value={"data": []}) as req:
+            client.get_notifications()
+        assert "work_objects.resource_type" in req.call_args[0][2]["opt_fields"]
 
     def test_search_projects(self, client):
         with patch.object(client, "_request", return_value={"data": [{"gid": "p1"}]}) as req:

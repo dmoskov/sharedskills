@@ -313,7 +313,7 @@ def duplicate_project(
 
 @mcp.tool(annotations=READ)
 def list_project_templates(team_gid: OptGid = None, limit: Limit = 50) -> list[dict]:
-    """Project templates in a team, or in the whole workspace."""
+    """Project templates in a team, or across every team when team_gid is omitted."""
     return _client().get_project_templates(team_gid=team_gid, limit=limit)
 
 
@@ -565,7 +565,8 @@ def create_task(
             custom_fields=custom_fields,
         )
     if remove_me_as_follower and task.get("gid"):
-        client.remove_followers(task["gid"], ["me"])
+        updated = client.remove_followers(task["gid"], ["me"])
+        task["followers"] = updated.get("followers", [])
         task["removed_followers"] = ["me"]
     return _with_url(task)
 
