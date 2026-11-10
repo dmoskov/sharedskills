@@ -139,6 +139,18 @@ asana remove <gid> -t <tag_gid>        # Remove tag from task
 asana followers rm <gid> me            # Stop following
 asana followers add <gid> <user>...    # "me", email, or user GID
 
+# Copies and templates (asynchronous in Asana; the CLI waits for the result)
+asana duplicate <gid> "Copy name" --include notes,subtasks,assignee
+asana duplicate <project_gid> "Copy name" --project
+asana templates -p <project_gid>       # Task templates on a project
+asana templates                        # Project templates
+asana from-template <template_gid> ["Name"] [--project]
+
+# Projects and out of office
+asana project-search "words" --owner me   # Paid plans only
+asana ooo                              # My out-of-office entries
+asana ooo add 2030-01-02 2030-01-05
+
 # Inbox (unarchived only; the API can't archive)
 asana -v inbox                         # List notifications with GIDs
 asana inbox read <notif_gid>...        # Mark read

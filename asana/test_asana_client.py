@@ -1768,3 +1768,185 @@ class TestFollowersAndInbox:
     def test_mark_requires_gids(self, client):
         with pytest.raises(ValueError):
             client.mark_notifications_read([])
+
+
+class TestApiGapCoverage:
+    """Duplication, templates, project writes, search, stories, likes, out of office."""
+
+    @pytest.fixture
+    def client(self):
+        with patch.dict(os.environ, {"ASANA_ACCESS_TOKEN": "test_token"}):
+            return AsanaClient(workspace="test_ws")
+
+    def test_duplicate_task(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "j1", "status": "in_progress"}}) as req:
+            job = client.duplicate_task("t1", "Copy", include=["notes", "subtasks"])
+        assert req.call_args[0][:2] == ("POST", "tasks/t1/duplicate")
+        assert req.call_args[1]["json_data"] == {"data": {"name": "Copy", "include": "notes,subtasks"}}
+        assert job["gid"] == "j1"
+
+    def test_duplicate_task_rejects_unknown_include(self, client):
+        with pytest.raises(ValueError, match="Unknown include"):
+            client.duplicate_task("t1", "Copy", include=["everything"])
+
+    def test_wait_for_job_polls_until_done(self, client):
+        done = {"gid": "j1", "status": "succeeded", "new_task": {"gid": "t2"}}
+        with patch.object(client, "get_job", side_effect=[{"gid": "j1", "status": "in_progress"}, done]) as get, \
+                patch("asana_client.time.sleep"):
+            assert client.wait_for_job({"gid": "j1", "status": "not_started"}) == done
+        assert get.call_count == 2
+
+    def test_wait_for_job_gives_up_at_timeout(self, client):
+        with patch.object(client, "get_job") as get:
+            job = client.wait_for_job({"gid": "j1", "status": "in_progress"}, timeout=0)
+        get.assert_not_called()
+        assert job["status"] == "in_progress"
+
+    def test_task_templates(self, client):
+        with patch.object(client, "_request", return_value={"data": [{"gid": "tt1"}]}) as req:
+            assert client.get_task_templates("p1") == [{"gid": "tt1"}]
+        assert req.call_args[0][1] == "task_templates" and req.call_args[0][2]["project"] == "p1"
+
+    def test_instantiate_task_template(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "j1"}}) as req:
+            client.instantiate_task_template("tt1")
+        assert req.call_args[0][1] == "task_templates/tt1/instantiateTask"
+        assert req.call_args[1]["json_data"] == {"data": {}}
+
+    def test_instantiate_project_template(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "j1"}}) as req:
+            client.instantiate_project_template(
+                "pt1", "Launch", team="team1", requested_dates={"1": "2030-01-02"}, requested_roles={"r1": "me"}
+            )
+        assert req.call_args[0][1] == "project_templates/pt1/instantiateProject"
+        assert req.call_args[1]["json_data"]["data"] == {
+            "name": "Launch",
+            "team": "team1",
+            "requested_dates": [{"gid": "1", "value": "2030-01-02"}],
+            "requested_roles": [{"gid": "r1", "value": "me"}],
+        }
+
+    def test_rollup_has_no_body(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "j1"}}) as req:
+            client.rollup_task_dates("t1")
+            client.rollup_project_dates("p1")
+        assert [c[0][1] for c in req.call_args_list] == ["tasks/t1/rollup", "projects/p1/rollup"]
+        assert all(c[1]["json_data"] is None for c in req.call_args_list)
+
+    def test_create_project(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "p1"}}) as req:
+            client.create_project("Plan", team="team1", default_view="board", notes=None)
+        assert req.call_args[0][:2] == ("POST", "projects")
+        assert req.call_args[1]["json_data"]["data"] == {
+            "name": "Plan", "workspace": "test_ws", "team": "team1", "default_view": "board",
+        }
+
+    def test_update_project_archives(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "p1"}}) as req:
+            client.update_project("p1", archived=True)
+        assert req.call_args[0][:2] == ("PUT", "projects/p1")
+        assert req.call_args[1]["json_data"] == {"data": {"archived": True}}
+
+    def test_update_project_validates(self, client):
+        with pytest.raises(ValueError, match="No updates"):
+            client.update_project("p1", name=None)
+        with pytest.raises(ValueError, match="Unknown project field"):
+            client.update_project("p1", completed=True)
+
+    def test_duplicate_project_schedule(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "j1"}}) as req:
+            client.duplicate_project("p1", "Copy", include=["task_dates", "members"], start_on="2030-01-02")
+        assert req.call_args[1]["json_data"]["data"] == {
+            "name": "Copy",
+            "include": "task_dates,members",
+            "schedule_dates": {"should_skip_weekends": True, "start_on": "2030-01-02"},
+        }
+
+    def test_duplicate_project_schedule_needs_task_dates(self, client):
+        with pytest.raises(ValueError, match="task_dates"):
+            client.duplicate_project("p1", "Copy", start_on="2030-01-02")
+
+    def test_project_followers_and_members(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "p1"}}) as req:
+            client.add_project_followers("p1", ["me", "u2"])
+            client.remove_project_followers("p1", ["u2"])
+            client.add_project_members("p1", ["u3"])
+            client.remove_project_members("p1", ["u3"])
+        sent = [(c[0][1], c[1]["json_data"]["data"]) for c in req.call_args_list]
+        assert sent == [
+            ("projects/p1/addFollowers", {"followers": "me,u2"}),
+            ("projects/p1/removeFollowers", {"followers": "u2"}),
+            ("projects/p1/addMembers", {"members": "u3"}),
+            ("projects/p1/removeMembers", {"members": "u3"}),
+        ]
+
+    def test_search_projects(self, client):
+        with patch.object(client, "_request", return_value={"data": [{"gid": "p1"}]}) as req:
+            client.search_projects(
+                text="plan", completed=False, owner="me", team="team1",
+                extra_params={"created_at.before": "2030-01-01T00:00:00Z"},
+            )
+        method, endpoint, params = req.call_args[0]
+        assert (method, endpoint) == ("GET", "workspaces/test_ws/projects/search")
+        assert params["text"] == "plan" and params["completed"] == "false"
+        assert params["owner.any"] == "me" and params["teams.any"] == "team1"
+        assert params["created_at.before"] == "2030-01-01T00:00:00Z"
+        assert "members.any" not in params
+
+    def test_search_projects_rejects_bad_sort(self, client):
+        with pytest.raises(ValueError):
+            client.search_projects(sort_by="name")
+
+    def test_get_task_requests_effective_memberships(self, client):
+        with patch.object(client, "_request", return_value={"data": {}}) as req:
+            client.get_task("t1")
+        assert "effective_memberships.is_inherited" in req.call_args[0][2]["opt_fields"]
+
+    def test_get_task_projects_includes_inherited(self, client):
+        with patch.object(client, "_request", return_value={"data": []}) as req:
+            client.get_task_projects("t1")
+        assert req.call_args[0][1] == "tasks/t1/projects"
+        assert req.call_args[0][2]["include_inherited_projects"] == "true"
+
+    def test_update_story(self, client):
+        with patch.object(client, "_request", return_value={"data": {"gid": "s1"}}) as req:
+            client.update_story("s1", html_text="<body>hi</body>", is_pinned=True)
+        assert req.call_args[0][:2] == ("PUT", "stories/s1")
+        assert req.call_args[1]["json_data"] == {"data": {"html_text": "<body>hi</body>", "is_pinned": True}}
+
+    def test_update_story_validates(self, client):
+        with pytest.raises(ValueError):
+            client.update_story("s1")
+        with pytest.raises(ValueError):
+            client.update_story("s1", text="a", html_text="<body>a</body>")
+
+    def test_set_task_liked(self, client):
+        with patch.object(client, "_request", return_value={"data": {"liked": False}}) as req:
+            client.set_task_liked("t1", False)
+        assert req.call_args[1]["json_data"] == {"data": {"liked": False}}
+
+    def test_get_reactions(self, client):
+        with patch.object(client, "_request", return_value={"data": []}) as req:
+            client.get_reactions("s1", "👍")
+        assert req.call_args[0][1] == "reactions"
+        assert req.call_args[0][2]["target"] == "s1" and req.call_args[0][2]["emoji_base"] == "👍"
+
+    def test_ooo_entries_resolve_me(self, client):
+        responses = [{"data": {"gid": "u1"}}, {"data": {"gid": "o1"}}]
+        with patch.object(client, "_request", side_effect=responses) as req:
+            client.create_ooo_entry("2030-01-02", "2030-01-05")
+        assert req.call_args_list[0][0][1] == "users/me"
+        assert req.call_args_list[1][1]["json_data"]["data"] == {
+            "user": "u1", "workspace": "test_ws", "start_date": "2030-01-02", "end_date": "2030-01-05",
+        }
+
+    def test_ooo_list_update_delete(self, client):
+        with patch.object(client, "_request", return_value={"data": []}) as req:
+            client.get_ooo_entries(user="u2", start_date="2030-01-01")
+            client.update_ooo_entry("o1", end_date="2030-01-09")
+            assert client.delete_ooo_entry("o1") is True
+        listing, update, delete = req.call_args_list
+        assert listing[0][2]["user"] == "u2" and listing[0][2]["start_date"] == "2030-01-01"
+        assert update[0][:2] == ("PUT", "ooo_entries/o1")
+        assert update[1]["json_data"] == {"data": {"end_date": "2030-01-09"}}
+        assert delete[0][:2] == ("DELETE", "ooo_entries/o1")

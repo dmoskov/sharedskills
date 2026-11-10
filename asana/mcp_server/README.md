@@ -20,9 +20,14 @@ asana_client / asana_sdk  ───────────────▶  Asan
 - `asana_auth.py`: `AsanaProvider` sends people through Asana's own login, stores their
   Asana tokens encrypted, refreshes them when the one-hour access token lapses, and lets
   in only the Asana user GIDs listed in `ASANA_MCP_ALLOWED_USERS`.
-- `server.py`: 55 tools covering tasks, subtasks, followers, search, sections, comments,
+- `server.py`: 79 tools covering tasks, subtasks, followers, search, sections, comments,
   dependencies, tags, custom fields, teams, portfolios, project status updates, goals,
-  attachments, and the Inbox. Descriptions and comments take markdown and are converted to Asana
+  attachments, the Inbox, project create/update/search, task and project duplication and
+  templates, comment editing, likes and reactions, and out-of-office entries.
+- Duplication, templates and date rollups are asynchronous jobs in Asana. Those tools wait
+  up to 20 seconds and return the new task or project, or `status` if it is still running.
+- Asana's API can like a task but cannot like a comment or add an emoji reaction; reactions
+  are read-only. Project search needs a paid Asana plan. Descriptions and comments take markdown and are converted to Asana
   rich text; task descriptions come back as markdown; task results include a `url`.
 - File attachments: MCP tool arguments are text, so real files don't go through them.
   `get_upload_link` returns a one-time, 15-minute URL under `/uploads/`; the client PUTs

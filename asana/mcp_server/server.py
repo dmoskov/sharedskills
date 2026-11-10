@@ -49,6 +49,8 @@ READ = {"readOnlyHint": True, "openWorldHint": True}
 WRITE = {"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}
 DESTRUCTIVE = {"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True}
 
+JOB_WAIT_SECONDS = 20.0
+
 TextFormat = Literal["markdown", "plain"]
 Gid = Annotated[str, Field(description="Asana GID (numeric string)")]
 OptGid = Optional[str]
@@ -114,6 +116,32 @@ def _rich(text: Optional[str], fmt: TextFormat) -> tuple[Optional[str], Optional
     return text, None
 
 
+def _project_url(gid: str) -> str:
+    return f"https://app.asana.com/0/{gid}"
+
+
+def _finish_job(client: AsanaClient, job: dict, key: Optional[str] = None) -> dict:
+    """Wait briefly for an Asana job and return what it produced."""
+    job = client.wait_for_job(job, timeout=JOB_WAIT_SECONDS)
+    status = job.get("status")
+    if status == "failed":
+        raise ToolError("Asana reported that the job failed")
+    out: dict = {"status": status, "job_gid": job.get("gid")}
+    created = job.get(key) if key else None
+    if created and created.get("gid"):
+        url = _task_url(created["gid"]) if key == "new_task" else _project_url(created["gid"])
+        out[key] = {**created, "url": url}
+    if job.get("dates_rollup_progress"):
+        out["dates_rollup_progress"] = job["dates_rollup_progress"]
+    if status != "succeeded":
+        out["note"] = "Still running in Asana; the result will appear shortly."
+    return out
+
+
+def _client_error(exc: ValueError) -> ToolError:
+    return ToolError(str(exc))
+
+
 mcp = FastMCP(name=os.environ.get("MCP_SERVER_NAME", "Asana"), instructions=INSTRUCTIONS)
 
 
@@ -155,6 +183,203 @@ def list_projects(archived: bool = False, limit: Limit = 50) -> list[dict]:
 def get_project(project_gid: Gid) -> dict:
     """Project details: notes, owner, due date, current status, custom fields."""
     return _client().get_project(project_gid)
+
+
+ProjectView = Literal["list", "board", "calendar", "timeline"]
+ProjectPrivacy = Literal["public_to_workspace", "private"]
+Users = Annotated[list[str], Field(min_length=1, description='Each "me", an email, or a user GID')]
+
+
+@mcp.tool(annotations=READ)
+def search_projects(
+    text: Annotated[Optional[str], Field(description="Words in the project name")] = None,
+    completed: Optional[bool] = None,
+    team_gid: OptGid = None,
+    owner: Annotated[Optional[str], Field(description='"me", user GID, or email')] = None,
+    member: Annotated[Optional[str], Field(description='"me", user GID, or email')] = None,
+    portfolio_gid: OptGid = None,
+    due_before: Date = None,
+    due_after: Date = None,
+    sort_by: Literal["modified_at", "created_at", "completed_at", "due_date", "relevance"] = "modified_at",
+    limit: Limit = 50,
+) -> list[dict]:
+    """Search projects by name, team, owner, member, portfolio or due date (paid Asana plans only; new projects can take a minute to appear)."""
+    return _client().search_projects(
+        text=text,
+        completed=completed,
+        team=team_gid,
+        owner=owner,
+        member=member,
+        portfolio=portfolio_gid,
+        due_before=due_before,
+        due_after=due_after,
+        sort_by=sort_by,
+        limit=limit,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+def create_project(
+    name: str,
+    team_gid: Annotated[OptGid, Field(description="Required when the workspace is an organization")] = None,
+    notes: Annotated[Optional[str], Field(description="Description")] = None,
+    notes_format: TextFormat = "markdown",
+    default_view: Optional[ProjectView] = None,
+    start_on: Date = None,
+    due_on: Date = None,
+    privacy: Optional[ProjectPrivacy] = None,
+    owner: Annotated[Optional[str], Field(description='"me", user GID, or email')] = None,
+    color: Optional[str] = None,
+) -> dict:
+    """Create a project."""
+    plain, html = _rich(notes, notes_format)
+    project = _client().create_project(
+        name,
+        team=team_gid,
+        notes=plain,
+        html_notes=html,
+        default_view=default_view,
+        start_on=start_on,
+        due_on=due_on,
+        privacy_setting=privacy,
+        owner=owner,
+        color=color,
+    )
+    if project.get("gid"):
+        project["url"] = _project_url(project["gid"])
+    return project
+
+
+@mcp.tool(annotations=WRITE)
+def update_project(
+    project_gid: Gid,
+    name: Optional[str] = None,
+    notes: Annotated[Optional[str], Field(description="Replaces the whole description")] = None,
+    notes_format: TextFormat = "markdown",
+    archived: Optional[bool] = None,
+    default_view: Optional[ProjectView] = None,
+    start_on: Date = None,
+    due_on: Date = None,
+    privacy: Optional[ProjectPrivacy] = None,
+    owner: Annotated[Optional[str], Field(description='"me", user GID, or email')] = None,
+    color: Optional[str] = None,
+) -> dict:
+    """Change a project's name, description, dates, owner, view, privacy or color, or archive/unarchive it."""
+    plain, html = _rich(notes, notes_format)
+    try:
+        return _client().update_project(
+            project_gid,
+            name=name,
+            notes=plain,
+            html_notes=html,
+            archived=archived,
+            default_view=default_view,
+            start_on=start_on,
+            due_on=due_on,
+            privacy_setting=privacy,
+            owner=owner,
+            color=color,
+        )
+    except ValueError as exc:
+        raise _client_error(exc) from exc
+
+
+@mcp.tool(annotations=WRITE)
+def duplicate_project(
+    project_gid: Gid,
+    name: str,
+    include: Annotated[
+        Optional[list[str]],
+        Field(
+            description="Extras to copy (tasks, views and rules always are): allocations, forms, members, notes, "
+            "permissions, task_assignee, task_attachments, task_dates, task_dependencies, task_followers, "
+            "task_notes, task_projects, task_subtasks, task_tags, task_templates, task_type_default"
+        ),
+    ] = None,
+    team_gid: OptGid = None,
+    start_on: Annotated[Optional[str], Field(description="Shift task dates so the copy starts here; needs task_dates")] = None,
+    due_on: Annotated[Optional[str], Field(description="Or shift so it ends here; not both")] = None,
+) -> dict:
+    """Copy a project. Returns the new project once Asana finishes (usually seconds)."""
+    client = _client()
+    try:
+        job = client.duplicate_project(
+            project_gid, name, include=include, team=team_gid, start_on=start_on, due_on=due_on
+        )
+    except ValueError as exc:
+        raise _client_error(exc) from exc
+    return _finish_job(client, job, "new_project")
+
+
+@mcp.tool(annotations=READ)
+def list_project_templates(team_gid: OptGid = None, limit: Limit = 50) -> list[dict]:
+    """Project templates in a team, or in the whole workspace."""
+    return _client().get_project_templates(team_gid=team_gid, limit=limit)
+
+
+@mcp.tool(annotations=READ)
+def get_project_template(project_template_gid: Gid) -> dict:
+    """A project template, with the dates and roles it asks for when used."""
+    return _client().get_project_template(project_template_gid)
+
+
+@mcp.tool(annotations=WRITE)
+def create_project_from_template(
+    project_template_gid: Gid,
+    name: str,
+    team_gid: Annotated[OptGid, Field(description="Required when the workspace is an organization")] = None,
+    privacy: Optional[ProjectPrivacy] = None,
+    dates: Annotated[
+        Optional[dict[str, str]],
+        Field(description='Template date GID -> YYYY-MM-DD ("1" = project start, "2" = project due; see get_project_template)'),
+    ] = None,
+    roles: Annotated[
+        Optional[dict[str, str]], Field(description='Template role GID -> "me", email, or user GID')
+    ] = None,
+) -> dict:
+    """Create a project from a project template. Returns the new project once Asana finishes."""
+    client = _client()
+    job = client.instantiate_project_template(
+        project_template_gid,
+        name,
+        team=team_gid,
+        privacy_setting=privacy,
+        requested_dates=dates,
+        requested_roles=roles,
+    )
+    return _finish_job(client, job, "new_project")
+
+
+def _people(project: dict) -> dict:
+    return {
+        "project": project.get("gid"),
+        "followers": project.get("followers", []),
+        "members": project.get("members", []),
+    }
+
+
+@mcp.tool(annotations=WRITE)
+def add_project_followers(project_gid: Gid, followers: Users) -> dict:
+    """Make people followers of a project (they also become members)."""
+    return _people(_client().add_project_followers(project_gid, followers))
+
+
+@mcp.tool(annotations=WRITE)
+def remove_project_followers(project_gid: Gid, followers: Users) -> dict:
+    """Stop people following a project; they stay members."""
+    return _people(_client().remove_project_followers(project_gid, followers))
+
+
+@mcp.tool(annotations=WRITE)
+def add_project_members(project_gid: Gid, members: Users) -> dict:
+    """Give people access to a project as members."""
+    return _people(_client().add_project_members(project_gid, members))
+
+
+@mcp.tool(annotations=WRITE)
+def remove_project_members(project_gid: Gid, members: Users) -> dict:
+    """Remove people from a project's members."""
+    return _people(_client().remove_project_members(project_gid, members))
 
 
 @mcp.tool(annotations=READ)
@@ -214,7 +439,10 @@ def post_project_status(
 
 @mcp.tool(annotations=READ)
 def get_task(task_gid: Gid) -> dict:
-    """Full task details; the description is returned as markdown in `notes_markdown`."""
+    """Full task details; the description is returned as markdown in `notes_markdown`.
+
+    `effective_memberships` lists the projects a subtask inherits from its parents (is_inherited).
+    """
     task = _client().get_task(task_gid)
     html = task.pop("html_notes", None)
     if html:
@@ -421,7 +649,63 @@ def remove_task_from_project(task_gid: Gid, project_gid: Gid) -> dict:
     return {"task": task_gid, "removed_from_project": project_gid}
 
 
-Users = Annotated[list[str], Field(min_length=1, description='Each "me", an email, or a user GID')]
+@mcp.tool(annotations=WRITE)
+def duplicate_task(
+    task_gid: Gid,
+    name: str,
+    include: Annotated[
+        Optional[list[str]],
+        Field(
+            description="What to copy besides the name: assignee, attachments, dates, dependencies, followers, "
+            "notes, parent, projects, subtasks, tags"
+        ),
+    ] = None,
+) -> dict:
+    """Copy a task. Returns the new task once Asana finishes (usually seconds)."""
+    client = _client()
+    try:
+        job = client.duplicate_task(task_gid, name, include=include)
+    except ValueError as exc:
+        raise _client_error(exc) from exc
+    return _finish_job(client, job, "new_task")
+
+
+@mcp.tool(annotations=READ)
+def list_task_templates(project_gid: Gid, limit: Limit = 50) -> list[dict]:
+    """Task templates defined on a project."""
+    return _client().get_task_templates(project_gid, limit=limit)
+
+
+@mcp.tool(annotations=WRITE)
+def create_task_from_template(
+    task_template_gid: Gid,
+    name: Annotated[Optional[str], Field(description="Defaults to the template's name")] = None,
+) -> dict:
+    """Create a task from a task template (in the template's project). Returns the new task once Asana finishes."""
+    client = _client()
+    return _finish_job(client, client.instantiate_task_template(task_template_gid, name=name), "new_task")
+
+
+@mcp.tool(annotations=READ)
+def get_task_projects(task_gid: Gid, include_inherited: bool = True) -> list[dict]:
+    """Projects a task is in; for a subtask, also the projects it inherits from its parent tasks."""
+    return _client().get_task_projects(task_gid, include_inherited=include_inherited)
+
+
+@mcp.tool(annotations=WRITE)
+def rollup_subtask_dates(task_gid: OptGid = None, project_gid: OptGid = None) -> dict:
+    """Stretch parent task dates to cover their subtasks' dates, for one task or every task in a project."""
+    if bool(task_gid) == bool(project_gid):
+        raise ToolError("Give exactly one of task_gid or project_gid")
+    client = _client()
+    job = client.rollup_task_dates(task_gid) if task_gid else client.rollup_project_dates(project_gid)
+    return _finish_job(client, job)
+
+
+@mcp.tool(annotations=WRITE)
+def like_task(task_gid: Gid, liked: bool = True) -> dict:
+    """Like a task as the signed-in user, or unlike it with liked=false."""
+    return _with_url(_client().set_task_liked(task_gid, liked))
 
 
 @mcp.tool(annotations=WRITE)
@@ -471,6 +755,37 @@ def add_comment(task_gid: Gid, text: str, text_format: TextFormat = "markdown") 
     return _client().add_comment(task_gid, text=plain, html_text=html)
 
 
+@mcp.tool(annotations=READ)
+def get_comment(story_gid: Gid) -> dict:
+    """One comment with its pin state, like count and emoji reaction summary."""
+    return _client().get_story(story_gid)
+
+
+@mcp.tool(annotations=WRITE)
+def update_comment(
+    story_gid: Gid,
+    text: Annotated[Optional[str], Field(description="New text; only the author can edit")] = None,
+    text_format: TextFormat = "markdown",
+    pinned: Annotated[Optional[bool], Field(description="Pin or unpin the comment on its task")] = None,
+) -> dict:
+    """Edit a comment's text and/or pin or unpin it."""
+    plain, html = _rich(text, text_format)
+    try:
+        return _client().update_story(story_gid, text=plain, html_text=html, is_pinned=pinned)
+    except ValueError as exc:
+        raise _client_error(exc) from exc
+
+
+@mcp.tool(annotations=READ)
+def list_reactions(
+    target_gid: Annotated[str, Field(description="GID of a comment (story) or status update")],
+    emoji: Annotated[str, Field(description="The emoji to look up, e.g. 👍 (see get_comment's reaction_summary)")],
+    limit: Limit = 50,
+) -> list[dict]:
+    """Who reacted with a given emoji. Asana's API can't add reactions or like comments; only tasks can be liked (like_task)."""
+    return _client().get_reactions(target_gid, emoji, limit=limit)
+
+
 @mcp.tool(annotations=DESTRUCTIVE)
 def delete_comment(story_gid: Gid) -> dict:
     """Delete a comment (story GID from get_comments). Only the author can delete it."""
@@ -510,6 +825,48 @@ def mark_notifications_unread(notification_gids: NotificationGids) -> dict:
     """Mark notifications unread. An archived notification also returns to the top of the Inbox."""
     failed = _client().mark_notifications_unread(notification_gids)
     return {"marked_unread": len(set(notification_gids)) - len(failed), "failed_gids": failed}
+
+
+# ========== Out of office ==========
+
+UserRef = Annotated[str, Field(description='"me" or a user GID')]
+
+
+@mcp.tool(annotations=READ)
+def list_out_of_office(
+    user: UserRef = "me",
+    start_date: Annotated[Optional[str], Field(description="YYYY-MM-DD; only entries overlapping the range")] = None,
+    end_date: Date = None,
+    limit: Limit = 50,
+) -> list[dict]:
+    """When someone is marked out of office in Asana."""
+    return _client().get_ooo_entries(user=user, start_date=start_date, end_date=end_date, limit=limit)
+
+
+@mcp.tool(annotations=WRITE)
+def set_out_of_office(
+    start_date: Annotated[str, Field(description="YYYY-MM-DD, first day away")],
+    end_date: Annotated[str, Field(description="YYYY-MM-DD, last day away")],
+    user: UserRef = "me",
+) -> dict:
+    """Mark someone out of office for a date range. Overlapping an existing entry is rejected; update that one instead."""
+    return _client().create_ooo_entry(start_date, end_date, user=user)
+
+
+@mcp.tool(annotations=WRITE)
+def update_out_of_office(ooo_entry_gid: Gid, start_date: Date = None, end_date: Date = None) -> dict:
+    """Change the dates of an out-of-office entry."""
+    try:
+        return _client().update_ooo_entry(ooo_entry_gid, start_date=start_date, end_date=end_date)
+    except ValueError as exc:
+        raise _client_error(exc) from exc
+
+
+@mcp.tool(annotations=DESTRUCTIVE)
+def delete_out_of_office(ooo_entry_gid: Gid) -> dict:
+    """Delete an out-of-office entry."""
+    _client().delete_ooo_entry(ooo_entry_gid)
+    return {"deleted": ooo_entry_gid}
 
 
 # ========== Dependencies ==========

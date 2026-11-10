@@ -36,6 +36,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Any, Dict, List, Optional
 
 try:
@@ -54,6 +55,17 @@ logger = logging.getLogger(__name__)
 ASANA_BASE_URL = "https://app.asana.com/api/1.0"
 REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
+JOB_POLL_INTERVAL = 1.0
+JOB_FIELDS = "status,resource_subtype,new_task.name,new_project.name,dates_rollup_progress"
+EFFECTIVE_MEMBERSHIP_FIELDS = (
+    "effective_memberships.project.name,effective_memberships.section.name,"
+    "effective_memberships.is_inherited"
+)
+PROJECT_FIELDS = "name,owner.name,due_on,start_on,archived,completed,team.name,permalink_url"
+STORY_FIELDS = (
+    "created_at,created_by.name,text,html_text,type,resource_subtype,is_pinned,is_edited,"
+    "num_likes,liked,reaction_summary"
+)
 NOTIFICATION_PAGE_MAX = 100
 NOTIFICATION_MARK_BATCH = 50
 NOTIFICATION_FIELDS = (
@@ -338,7 +350,8 @@ class AsanaClient:
         params = {
             "opt_fields": "name,notes,html_notes,start_on,due_on,due_at,completed,assignee.name,projects.name,"
                           "custom_fields.name,custom_fields.display_value,tags.name,"
-                          "memberships.section.name,dependencies,dependents,num_subtasks,recurrence"
+                          "memberships.section.name,dependencies,dependents,num_subtasks,recurrence,"
+                          "liked,num_likes," + EFFECTIVE_MEMBERSHIP_FIELDS
         }
         result = self._request("GET", f"tasks/{task_gid}", params)
         return result.get("data", {})
@@ -945,6 +958,413 @@ class AsanaClient:
             json_data={"data": {"project": project_gid}},
         )
         return result.get("data", {})
+
+    # ========== Job Operations ==========
+
+    def get_job(self, job_gid: str) -> Dict[str, Any]:
+        """Get an asynchronous job (duplication, template instantiation, date rollup)."""
+        result = self._request("GET", f"jobs/{job_gid}", {"opt_fields": JOB_FIELDS})
+        return result.get("data", {})
+
+    def wait_for_job(self, job: Dict[str, Any], timeout: float = 30.0) -> Dict[str, Any]:
+        """Poll a job until it succeeds or fails, or until timeout seconds pass.
+
+        Returns the latest job; check `status` ("succeeded", "failed", or still
+        "in_progress"/"not_started" if the timeout was reached).
+        """
+        deadline = time.monotonic() + timeout
+        while job.get("gid") and job.get("status") not in ("succeeded", "failed"):
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(JOB_POLL_INTERVAL)
+            job = self.get_job(job["gid"])
+        return job
+
+    def _start_job(self, endpoint: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        result = self._request(
+            "POST",
+            endpoint,
+            params={"opt_fields": JOB_FIELDS},
+            json_data={"data": data} if data is not None else None,
+        )
+        return result.get("data", {})
+
+    # ========== Duplication, Templates & Rollups ==========
+
+    TASK_DUPLICATE_INCLUDE = (
+        "assignee", "attachments", "dates", "dependencies", "followers",
+        "notes", "parent", "projects", "subtasks", "tags",
+    )
+    PROJECT_DUPLICATE_INCLUDE = (
+        "allocations", "forms", "members", "notes", "permissions", "task_assignee",
+        "task_attachments", "task_dates", "task_dependencies", "task_followers",
+        "task_notes", "task_projects", "task_subtasks", "task_tags", "task_templates",
+        "task_type_default",
+    )
+
+    @staticmethod
+    def _include(values: Optional[List[str]], allowed: tuple) -> Optional[str]:
+        if not values:
+            return None
+        unknown = sorted(set(values) - set(allowed))
+        if unknown:
+            raise ValueError(f"Unknown include value(s) {unknown}; allowed: {', '.join(allowed)}")
+        return ",".join(values)
+
+    def duplicate_task(self, task_gid: str, name: str, include: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Start duplicating a task. Returns a job; the copy is its `new_task`.
+
+        include: which parts to copy (see TASK_DUPLICATE_INCLUDE). Nothing but
+        the name is copied when omitted.
+        """
+        data: Dict[str, Any] = {"name": name}
+        joined = self._include(include, self.TASK_DUPLICATE_INCLUDE)
+        if joined:
+            data["include"] = joined
+        return self._start_job(f"tasks/{task_gid}/duplicate", data)
+
+    def get_task_templates(self, project_gid: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """List a project's task templates."""
+        params = {"project": project_gid, "limit": str(limit), "opt_fields": "name,project.name"}
+        return self._request("GET", "task_templates", params).get("data", [])
+
+    def instantiate_task_template(self, task_template_gid: str, name: Optional[str] = None) -> Dict[str, Any]:
+        """Start creating a task from a task template. Returns a job; the task is its `new_task`."""
+        data = {"name": name} if name else {}
+        return self._start_job(f"task_templates/{task_template_gid}/instantiateTask", data)
+
+    def get_project_templates(
+        self, team_gid: Optional[str] = None, workspace: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List project templates in a team, or in the whole workspace."""
+        params = {"limit": str(limit), "opt_fields": "name,description,team.name"}
+        if team_gid:
+            params["team"] = team_gid
+        else:
+            params["workspace"] = self._get_workspace(workspace)
+        return self._request("GET", "project_templates", params).get("data", [])
+
+    def get_project_template(self, project_template_gid: str) -> Dict[str, Any]:
+        """Get a project template, including the dates and roles it asks for."""
+        params = {
+            "opt_fields": "name,description,team.name,requested_dates.name,requested_dates.description,"
+                          "requested_roles.name"
+        }
+        return self._request("GET", f"project_templates/{project_template_gid}", params).get("data", {})
+
+    def instantiate_project_template(
+        self,
+        project_template_gid: str,
+        name: str,
+        team: Optional[str] = None,
+        privacy_setting: Optional[str] = None,
+        requested_dates: Optional[Dict[str, str]] = None,
+        requested_roles: Optional[Dict[str, str]] = None,
+        is_strict: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Start creating a project from a template. Returns a job; the project is its `new_project`.
+
+        requested_dates maps a template date GID to YYYY-MM-DD ("1" is the
+        project start date, "2" the project due date). requested_roles maps a
+        template role GID to "me", an email, or a user GID.
+        """
+        data: Dict[str, Any] = {"name": name}
+        if team:
+            data["team"] = team
+        if privacy_setting:
+            data["privacy_setting"] = privacy_setting
+        if requested_dates:
+            data["requested_dates"] = [{"gid": g, "value": v} for g, v in requested_dates.items()]
+        if requested_roles:
+            data["requested_roles"] = [{"gid": g, "value": v} for g, v in requested_roles.items()]
+        if is_strict is not None:
+            data["is_strict"] = is_strict
+        return self._start_job(f"project_templates/{project_template_gid}/instantiateProject", data)
+
+    def rollup_task_dates(self, task_gid: str) -> Dict[str, Any]:
+        """Start stretching a task's dates to cover its subtasks' dates. Returns a job."""
+        return self._start_job(f"tasks/{task_gid}/rollup")
+
+    def rollup_project_dates(self, project_gid: str) -> Dict[str, Any]:
+        """Start rolling subtask dates up into every parent task of a project. Returns a job."""
+        return self._start_job(f"projects/{project_gid}/rollup")
+
+    # ========== Project Write Operations ==========
+
+    PROJECT_WRITE_FIELDS = (
+        "name", "notes", "html_notes", "color", "default_view", "due_on", "start_on",
+        "privacy_setting", "owner", "archived",
+    )
+
+    def create_project(
+        self,
+        name: str,
+        team: Optional[str] = None,
+        workspace: Optional[str] = None,
+        **fields: Any,
+    ) -> Dict[str, Any]:
+        """Create a project. Organizations require `team`.
+
+        Other fields: notes, html_notes, color, default_view (list, board,
+        calendar, timeline), due_on, start_on, privacy_setting
+        (public_to_workspace, private), owner.
+        """
+        data = self._project_fields(fields)
+        data["name"] = name
+        data["workspace"] = self._get_workspace(workspace)
+        if team:
+            data["team"] = team
+        result = self._request(
+            "POST", "projects", params={"opt_fields": PROJECT_FIELDS}, json_data={"data": data}
+        )
+        return result.get("data", {})
+
+    def update_project(self, project_gid: str, **fields: Any) -> Dict[str, Any]:
+        """Update a project. Fields: see PROJECT_WRITE_FIELDS (archived=True archives it)."""
+        data = self._project_fields(fields)
+        if not data:
+            raise ValueError("No updates provided")
+        result = self._request(
+            "PUT", f"projects/{project_gid}", params={"opt_fields": PROJECT_FIELDS}, json_data={"data": data}
+        )
+        return result.get("data", {})
+
+    def _project_fields(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        unknown = sorted(set(fields) - set(self.PROJECT_WRITE_FIELDS))
+        if unknown:
+            raise ValueError(f"Unknown project field(s) {unknown}")
+        return {k: v for k, v in fields.items() if v is not None}
+
+    def duplicate_project(
+        self,
+        project_gid: str,
+        name: str,
+        include: Optional[List[str]] = None,
+        team: Optional[str] = None,
+        start_on: Optional[str] = None,
+        due_on: Optional[str] = None,
+        skip_weekends: bool = True,
+    ) -> Dict[str, Any]:
+        """Start duplicating a project. Returns a job; the copy is its `new_project`.
+
+        Tasks, views and rules are always copied; `include` adds more (see
+        PROJECT_DUPLICATE_INCLUDE). start_on or due_on (one of them) shifts
+        task dates to the new schedule and needs "task_dates" in include.
+        """
+        if start_on and due_on:
+            raise ValueError("Give start_on or due_on, not both")
+        data: Dict[str, Any] = {"name": name}
+        joined = self._include(include, self.PROJECT_DUPLICATE_INCLUDE)
+        if joined:
+            data["include"] = joined
+        if team:
+            data["team"] = team
+        if start_on or due_on:
+            if "task_dates" not in (include or []):
+                raise ValueError('start_on/due_on need "task_dates" in include')
+            schedule: Dict[str, Any] = {"should_skip_weekends": skip_weekends}
+            if start_on:
+                schedule["start_on"] = start_on
+            if due_on:
+                schedule["due_on"] = due_on
+            data["schedule_dates"] = schedule
+        return self._start_job(f"projects/{project_gid}/duplicate", data)
+
+    def _project_people(self, project_gid: str, action: str, field: str, users: List[str]) -> Dict[str, Any]:
+        if not users:
+            raise ValueError(f"{field} must be a non-empty list")
+        result = self._request(
+            "POST",
+            f"projects/{project_gid}/{action}",
+            params={"opt_fields": "name,followers.name,members.name"},
+            json_data={"data": {field: ",".join(users)}},
+        )
+        return result.get("data", {})
+
+    def add_project_followers(self, project_gid: str, followers: List[str]) -> Dict[str, Any]:
+        """Add project followers ("me", email, or user GID); they also become members."""
+        return self._project_people(project_gid, "addFollowers", "followers", followers)
+
+    def remove_project_followers(self, project_gid: str, followers: List[str]) -> Dict[str, Any]:
+        """Remove project followers; they stay members."""
+        return self._project_people(project_gid, "removeFollowers", "followers", followers)
+
+    def add_project_members(self, project_gid: str, members: List[str]) -> Dict[str, Any]:
+        """Add project members ("me", email, or user GID)."""
+        return self._project_people(project_gid, "addMembers", "members", members)
+
+    def remove_project_members(self, project_gid: str, members: List[str]) -> Dict[str, Any]:
+        """Remove project members."""
+        return self._project_people(project_gid, "removeMembers", "members", members)
+
+    PROJECT_SEARCH_SORTS = ("modified_at", "created_at", "completed_at", "due_date", "relevance")
+
+    def search_projects(
+        self,
+        text: Optional[str] = None,
+        completed: Optional[bool] = None,
+        team: Optional[str] = None,
+        owner: Optional[str] = None,
+        member: Optional[str] = None,
+        portfolio: Optional[str] = None,
+        due_before: Optional[str] = None,
+        due_after: Optional[str] = None,
+        sort_by: str = "modified_at",
+        sort_ascending: bool = False,
+        limit: int = 50,
+        workspace: Optional[str] = None,
+        extra_params: Optional[Dict[str, str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search projects by name and filters (premium workspaces only).
+
+        Results lag writes by up to a minute and have no offset paging; page by
+        sorting on created_at and passing extra_params={"created_at.before": ...}.
+        extra_params takes any other documented filter (custom_fields.<gid>.value,
+        members.not, created_on.after, ...).
+        """
+        if sort_by not in self.PROJECT_SEARCH_SORTS:
+            raise ValueError(f"sort_by must be one of {', '.join(self.PROJECT_SEARCH_SORTS)}")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        params: Dict[str, str] = {
+            "sort_by": sort_by,
+            "sort_ascending": str(sort_ascending).lower(),
+            "limit": str(limit),
+            "opt_fields": PROJECT_FIELDS,
+        }
+        optional = {
+            "text": text,
+            "teams.any": team,
+            "owner.any": owner,
+            "members.any": member,
+            "portfolios.any": portfolio,
+            "due_on.before": due_before,
+            "due_on.after": due_after,
+        }
+        params.update({k: v for k, v in optional.items() if v})
+        if completed is not None:
+            params["completed"] = str(completed).lower()
+        params.update(extra_params or {})
+        endpoint = f"workspaces/{self._get_workspace(workspace)}/projects/search"
+        return self._request("GET", endpoint, params).get("data", [])
+
+    def get_task_projects(self, task_gid: str, include_inherited: bool = True) -> List[Dict[str, Any]]:
+        """Projects a task is in; for a subtask, optionally those inherited from its ancestors."""
+        params = {"opt_fields": "name", "include_inherited_projects": str(include_inherited).lower()}
+        return self._request("GET", f"tasks/{task_gid}/projects", params).get("data", [])
+
+    # ========== Story Editing, Likes & Reactions ==========
+
+    def get_story(self, story_gid: str) -> Dict[str, Any]:
+        """Get one story (comment) with its pin state, likes and reaction summary."""
+        return self._request("GET", f"stories/{story_gid}", {"opt_fields": STORY_FIELDS}).get("data", {})
+
+    def update_story(
+        self,
+        story_gid: str,
+        text: Optional[str] = None,
+        html_text: Optional[str] = None,
+        is_pinned: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Edit a comment's text (author only) and/or pin or unpin it."""
+        if text and html_text:
+            raise ValueError("Give text or html_text, not both")
+        data: Dict[str, Any] = {}
+        if html_text:
+            data["html_text"] = html_text
+        elif text:
+            data["text"] = text
+        if is_pinned is not None:
+            data["is_pinned"] = is_pinned
+        if not data:
+            raise ValueError("No updates provided")
+        result = self._request(
+            "PUT", f"stories/{story_gid}", params={"opt_fields": STORY_FIELDS}, json_data={"data": data}
+        )
+        return result.get("data", {})
+
+    def set_task_liked(self, task_gid: str, liked: bool = True) -> Dict[str, Any]:
+        """Like or unlike a task as the current user.
+
+        Asana's API cannot like a comment or add emoji reactions; those are read-only.
+        """
+        result = self._request(
+            "PUT",
+            f"tasks/{task_gid}",
+            params={"opt_fields": "name,liked,num_likes"},
+            json_data={"data": {"liked": liked}},
+        )
+        return result.get("data", {})
+
+    def get_reactions(self, target_gid: str, emoji_base: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Who reacted with one emoji on a story or status update.
+
+        Use get_story's `reaction_summary` to see which emoji are present.
+        """
+        params = {
+            "target": target_gid,
+            "emoji_base": emoji_base,
+            "limit": str(limit),
+            "opt_fields": "emoji,user.name",
+        }
+        return self._request("GET", "reactions", params).get("data", [])
+
+    # ========== Out of Office Operations ==========
+
+    def _user_gid(self, user: str) -> str:
+        if user != "me":
+            return user
+        return self._request("GET", "users/me", {"opt_fields": "gid"})["data"]["gid"]
+
+    def get_ooo_entries(
+        self,
+        user: str = "me",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 50,
+        workspace: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """A user's out-of-office entries, optionally only those overlapping a date range."""
+        params = {
+            "user": self._user_gid(user),
+            "workspace": self._get_workspace(workspace),
+            "limit": str(limit),
+            "opt_fields": "start_date,end_date,user.name,created_by.name",
+        }
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        return self._request("GET", "ooo_entries", params).get("data", [])
+
+    def create_ooo_entry(
+        self, start_date: str, end_date: str, user: str = "me", workspace: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Mark a user out of office from start_date through end_date (YYYY-MM-DD).
+
+        Asana rejects an entry that overlaps another for the same user.
+        """
+        data = {
+            "user": self._user_gid(user),
+            "workspace": self._get_workspace(workspace),
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        return self._request("POST", "ooo_entries", json_data={"data": data}).get("data", {})
+
+    def update_ooo_entry(
+        self, ooo_entry_gid: str, start_date: Optional[str] = None, end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Change the dates of an out-of-office entry."""
+        data = {k: v for k, v in (("start_date", start_date), ("end_date", end_date)) if v}
+        if not data:
+            raise ValueError("No updates provided")
+        return self._request("PUT", f"ooo_entries/{ooo_entry_gid}", json_data={"data": data}).get("data", {})
+
+    def delete_ooo_entry(self, ooo_entry_gid: str) -> bool:
+        """Delete an out-of-office entry."""
+        self._request("DELETE", f"ooo_entries/{ooo_entry_gid}")
+        return True
 
     # ========== Follower Operations ==========
 
@@ -1688,6 +2108,91 @@ def cmd_remove(client: AsanaClient, args):
         sys.exit(1)
 
 
+def _print_job(client: AsanaClient, job: dict, args, key: Optional[str] = None):
+    job = client.wait_for_job(job)
+    if args.json:
+        print(json.dumps(job, indent=2))
+        return
+    created = job.get(key) if key else None
+    if created:
+        print(f"{job.get('status')}: {created.get('name', '')} [{created.get('gid')}]")
+    else:
+        print(f"Job {job.get('gid')}: {job.get('status')}")
+    if job.get("status") == "failed":
+        sys.exit(1)
+
+
+def cmd_duplicate(client: AsanaClient, args):
+    """Duplicate a task or project."""
+    include = args.include.split(",") if args.include else None
+    if args.project:
+        job = client.duplicate_project(args.gid, args.name, include=include)
+        _print_job(client, job, args, "new_project")
+    else:
+        job = client.duplicate_task(args.gid, args.name, include=include)
+        _print_job(client, job, args, "new_task")
+
+
+def cmd_templates(client: AsanaClient, args):
+    """List task templates of a project, or project templates."""
+    if args.project:
+        items = client.get_task_templates(args.project)
+    else:
+        items = client.get_project_templates(team_gid=args.team)
+    if args.json:
+        print(json.dumps(items, indent=2))
+        return
+    for item in items:
+        print(f"[{item['gid']}] {item.get('name', '')}")
+
+
+def cmd_from_template(client: AsanaClient, args):
+    """Create a task or project from a template."""
+    if args.project:
+        if not args.name:
+            print("A project from a template needs a name", file=sys.stderr)
+            sys.exit(1)
+        job = client.instantiate_project_template(args.template_gid, args.name, team=args.team)
+        _print_job(client, job, args, "new_project")
+    else:
+        job = client.instantiate_task_template(args.template_gid, name=args.name)
+        _print_job(client, job, args, "new_task")
+
+
+def cmd_project_search(client: AsanaClient, args):
+    """Search projects."""
+    projects = client.search_projects(
+        text=args.text, completed=args.completed, team=args.team, owner=args.owner,
+        member=args.member, sort_by=args.sort_by, limit=args.limit,
+    )
+    if args.json:
+        print(json.dumps(projects, indent=2))
+        return
+    for project in projects:
+        print(f"[{project['gid']}] {project.get('name', '')}")
+
+
+def cmd_ooo(client: AsanaClient, args):
+    """List, add or remove out-of-office entries."""
+    action = args.ooo_action or "list"
+    if action == "add":
+        result = client.create_ooo_entry(args.start_date, args.end_date, user=args.user)
+    elif action == "rm":
+        client.delete_ooo_entry(args.entry_gid)
+        result = {"deleted": args.entry_gid}
+    else:
+        result = client.get_ooo_entries(user=args.user)
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+    entries = result if isinstance(result, list) else [result]
+    for entry in entries:
+        if "deleted" in entry:
+            print(f"Deleted out-of-office entry {entry['deleted']}")
+        else:
+            print(f"[{entry.get('gid')}] {entry.get('start_date')} to {entry.get('end_date')}")
+
+
 def cmd_followers(client: AsanaClient, args):
     """Add or remove task followers."""
     if args.followers_action == "add":
@@ -2158,6 +2663,45 @@ Environment:
     remove.set_defaults(func=cmd_remove)
 
     # status-update
+    dup = subparsers.add_parser("duplicate", help="Duplicate a task (or a project with --project)")
+    dup.add_argument("gid", help="Task or project GID")
+    dup.add_argument("name", help="Name of the copy")
+    dup.add_argument("--project", action="store_true", help="The GID is a project")
+    dup.add_argument("--include", help="Comma-separated parts to copy (e.g. notes,subtasks,assignee)")
+    dup.set_defaults(func=cmd_duplicate)
+
+    templates = subparsers.add_parser("templates", help="List task templates (-p) or project templates")
+    templates.add_argument("-p", "--project", help="Project GID whose task templates to list")
+    templates.add_argument("-t", "--team", help="Team GID to list project templates for")
+    templates.set_defaults(func=cmd_templates)
+
+    from_tpl = subparsers.add_parser("from-template", help="Create a task (or project) from a template")
+    from_tpl.add_argument("template_gid", help="Task or project template GID")
+    from_tpl.add_argument("name", nargs="?", help="Name (required for projects)")
+    from_tpl.add_argument("--project", action="store_true", help="The GID is a project template")
+    from_tpl.add_argument("-t", "--team", help="Team GID for the new project")
+    from_tpl.set_defaults(func=cmd_from_template)
+
+    psearch = subparsers.add_parser("project-search", help="Search projects (paid plans)")
+    psearch.add_argument("text", nargs="?", help="Words in the project name")
+    psearch.add_argument("-t", "--team", help="Team GID")
+    psearch.add_argument("--owner", help='"me", email, or user GID')
+    psearch.add_argument("--member", help='"me", email, or user GID')
+    psearch.add_argument("-c", "--completed", type=lambda v: v.lower() == "true", default=None, help="true/false")
+    psearch.add_argument("--sort-by", default="modified_at", choices=AsanaClient.PROJECT_SEARCH_SORTS)
+    psearch.add_argument("-l", "--limit", type=int, default=50)
+    psearch.set_defaults(func=cmd_project_search)
+
+    ooo = subparsers.add_parser("ooo", help="List, add or remove out-of-office entries")
+    ooo.add_argument("-u", "--user", default="me", help='"me" or a user GID')
+    ooo_sub = ooo.add_subparsers(dest="ooo_action", metavar="action")
+    ooo_add = ooo_sub.add_parser("add", help="Mark out of office")
+    ooo_add.add_argument("start_date", help="YYYY-MM-DD")
+    ooo_add.add_argument("end_date", help="YYYY-MM-DD")
+    ooo_rm = ooo_sub.add_parser("rm", help="Delete an entry")
+    ooo_rm.add_argument("entry_gid", help="Out-of-office entry GID")
+    ooo.set_defaults(func=cmd_ooo)
+
     fol = subparsers.add_parser("followers", help="Add or remove task followers")
     fol_sub = fol.add_subparsers(dest="followers_action", metavar="action", required=True)
     for name, help_text in (("add", "Add followers"), ("rm", "Remove followers")):
