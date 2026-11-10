@@ -70,7 +70,7 @@ NOTIFICATION_PAGE_MAX = 100
 NOTIFICATION_MARK_BATCH = 50
 NOTIFICATION_FIELDS = (
     "created_at,created_by.name,is_read,story_resource_subtype,"
-    "story.text,story.resource_subtype,work_objects.name"
+    "story.text,story.resource_subtype,work_objects.name,work_objects.resource_type"
 )
 
 
@@ -1036,13 +1036,29 @@ class AsanaClient:
     def get_project_templates(
         self, team_gid: Optional[str] = None, workspace: Optional[str] = None, limit: int = 50
     ) -> List[Dict[str, Any]]:
-        """List project templates in a team, or in the whole workspace."""
+        """List project templates in a team, or across the workspace.
+
+        Organizations only allow listing by team, so without team_gid this
+        walks the organization's teams until `limit` templates are found.
+        """
         params = {"limit": str(limit), "opt_fields": "name,description,team.name"}
         if team_gid:
             params["team"] = team_gid
-        else:
-            params["workspace"] = self._get_workspace(workspace)
-        return self._request("GET", "project_templates", params).get("data", [])
+            return self._request("GET", "project_templates", params).get("data", [])
+        try:
+            return self._request(
+                "GET", "project_templates", {**params, "workspace": self._get_workspace(workspace)}
+            ).get("data", [])
+        except AsanaAPIError as exc:
+            if exc.status_code != 400 or "organization" not in str(exc).lower():
+                raise
+        templates: List[Dict[str, Any]] = []
+        for team in self.get_teams(organization=workspace):
+            if len(templates) >= limit:
+                break
+            params["team"] = team["gid"]
+            templates.extend(self._request("GET", "project_templates", params).get("data", []))
+        return templates[:limit]
 
     def get_project_template(self, project_template_gid: str) -> Dict[str, Any]:
         """Get a project template, including the dates and roles it asks for."""
@@ -1177,7 +1193,8 @@ class AsanaClient:
             "POST",
             f"projects/{project_gid}/{action}",
             params={"opt_fields": "name,followers.name,members.name"},
-            json_data={"data": {field: ",".join(users)}},
+            # removeMembers rejects "me", so always send real user GIDs.
+            json_data={"data": {field: ",".join(self._user_gid(u) for u in users)}},
         )
         return result.get("data", {})
 

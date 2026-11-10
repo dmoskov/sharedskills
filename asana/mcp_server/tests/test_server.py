@@ -494,6 +494,7 @@ async def test_create_task_can_drop_creator_as_follower(signed_in, asana_calls):
     assert unfollow["json"] == {"data": {"followers": ["me"]}}
     assert unfollow["token"] == "tok-alice"
     assert task["removed_followers"] == ["me"]
+    assert task["followers"] == []
 
 
 async def test_create_task_keeps_creator_as_follower_by_default(signed_in, asana_calls):
@@ -623,10 +624,11 @@ async def test_search_projects(signed_in, asana_calls):
 
 async def test_remove_project_members(signed_in, asana_calls):
     asana_calls.responses["projects/222/removeMembers"] = {"data": {"gid": "222", "members": []}}
+    asana_calls.responses["users/me"] = {"data": {"gid": "7"}}
 
-    result = await call("remove_project_members", {"project_gid": "222", "members": ["8", "9"]})
+    result = await call("remove_project_members", {"project_gid": "222", "members": ["me", "9"]})
 
-    assert asana_calls.calls[0]["json"] == {"data": {"members": "8,9"}}
+    assert asana_calls.calls[-1]["json"] == {"data": {"members": "7,9"}}
     assert result == {"project": "222", "followers": [], "members": []}
 
 
