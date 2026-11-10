@@ -480,3 +480,58 @@ async def test_attach_file_from_url_refuses_internal_addresses(signed_in, upload
     with pytest.raises(ToolError, match="URL not allowed"):
         await call("attach_file_from_url", {"task_gid": "111", "url": "http://example.com/a.png"})
     assert uploads == []
+
+
+async def test_create_task_can_drop_creator_as_follower(signed_in, asana_calls):
+    asana_calls.responses["tasks/111/removeFollowers"] = {"data": {"gid": "111", "followers": []}}
+    asana_calls.responses["tasks"] = {"data": {"gid": "111", "name": "Errand"}}
+
+    task = await call("create_task", {"name": "Errand", "project_gid": "222", "remove_me_as_follower": True})
+
+    create, unfollow = asana_calls.calls
+    assert create["endpoint"] == "tasks"
+    assert unfollow["endpoint"] == "tasks/111/removeFollowers"
+    assert unfollow["json"] == {"data": {"followers": ["me"]}}
+    assert unfollow["token"] == "tok-alice"
+    assert task["removed_followers"] == ["me"]
+
+
+async def test_create_task_keeps_creator_as_follower_by_default(signed_in, asana_calls):
+    asana_calls.responses["tasks"] = {"data": {"gid": "111"}}
+
+    await call("create_task", {"name": "Errand"})
+
+    assert [c["endpoint"] for c in asana_calls.calls] == ["tasks"]
+
+
+async def test_remove_followers(signed_in, asana_calls):
+    asana_calls.responses["tasks/111/removeFollowers"] = {"data": {"gid": "111", "followers": [{"gid": "7"}]}}
+
+    result = await call("remove_followers", {"task_gid": "111", "followers": ["8"]})
+
+    assert asana_calls.calls[0]["json"] == {"data": {"followers": ["8"]}}
+    assert result == {"task": "111", "followers": [{"gid": "7"}]}
+
+
+async def test_get_notifications_lists_inbox_with_task_urls(signed_in, asana_calls):
+    asana_calls.responses["users/me/notifications"] = {
+        "data": [{"gid": "n1", "is_read": False, "work_objects": [{"gid": "111", "resource_type": "task", "name": "T"}]}],
+        "next_page": {"offset": "next"},
+    }
+
+    page = await call("get_notifications", {"limit": 5})
+
+    req = asana_calls.calls[0]
+    assert req["params"]["workspace"] == "1000000001" and req["params"]["limit"] == "5"
+    assert page["next_offset"] == "next"
+    assert page["notifications"][0]["work_objects"][0]["url"].endswith("/111/f")
+
+
+async def test_mark_notifications_read_reports_failures(signed_in, asana_calls):
+    asana_calls.responses["users/me/notifications/markRead"] = {"data": {"failed_gids": ["n2"]}}
+
+    result = await call("mark_notifications_read", {"notification_gids": ["n1", "n2"]})
+
+    body = asana_calls.calls[0]["json"]["data"]
+    assert body == {"workspace": "1000000001", "notification_gids": ["n1", "n2"]}
+    assert result == {"marked_read": 1, "failed_gids": ["n2"]}

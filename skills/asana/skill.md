@@ -134,6 +134,15 @@ asana set-parent <gid> -p none                        # Remove parent
 # Remove associations
 asana remove <gid> -p <project_gid>    # Remove task from project
 asana remove <gid> -t <tag_gid>        # Remove tag from task
+
+# Followers (creating a task makes you a follower)
+asana followers rm <gid> me            # Stop following
+asana followers add <gid> <user>...    # "me", email, or user GID
+
+# Inbox (unarchived only; the API can't archive)
+asana -v inbox                         # List notifications with GIDs
+asana inbox read <notif_gid>...        # Mark read
+asana inbox unread <notif_gid>...      # Mark unread (also unarchives)
 ```
 
 **Subtasks and projects:** When building a task with subtasks, add **only the
