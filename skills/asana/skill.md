@@ -200,7 +200,7 @@ asana create-table "Accounts"
 asana add-column <table_gid> "Domain"            # text (default)
 asana add-column <table_gid> "Stage" --type enum -o Lead -o Customer -o Churned
 asana add-column <table_gid> "Tags" --type multi_enum -o Partner -o Reseller
-asana add-column <table_gid> "Employees" --type number --precision 0
+asana add-column <table_gid> "Employees" --type number          # precision defaults to 0
 asana add-column <table_gid> "Since" --type date
 asana add-column <table_gid> "Owner" --type people
 asana add-column <table_gid> --custom-field <field_gid>   # Reuse an existing global field
@@ -245,6 +245,17 @@ Gotchas:
 - **Columns first.** A record can only hold values for columns already on its
   table; there's no force-write. `add-column` creates a workspace-global custom
   field (tables only take global fields), so pick names that won't collide.
+- **Free and guest seats can't create fields.** `add-column` with a new name
+  fails with 402 ("Custom Fields are not available for free users or guests").
+  Have a paid member create the column, or attach an existing global field with
+  `add-column <table_gid> --custom-field <field_gid>`, which works on any seat,
+  as do record create and update.
+- **Tables are private to their creator by default.** Other users and bots get
+  403 on the table and its records until it is shared: add a membership with
+  `parent` = the table GID and `access_level` = `editor` (`POST /memberships`),
+  or share it in the Asana UI.
+- **Number columns** get precision 0 unless you pass `--precision`; Asana
+  rejects a new number field without one.
 - **Deleting a table leaves its columns** as workspace custom fields. Delete them
   separately if they were only for that table.
 - **Task reference fields can't point at records.** Store the record GID or URL

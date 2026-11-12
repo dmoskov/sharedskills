@@ -97,6 +97,32 @@ class TestTables:
         }
         assert field["gid"] == "f1"
 
+    def test_number_column_defaults_precision_to_zero(self, client):
+        with patch.object(client, "_request", return_value={"data": {"custom_field": {"gid": "f1"}}}) as req:
+            client.add_table_column("t1", "Size", "number")
+        assert req.call_args[1]["json_data"]["data"]["custom_field"] == {
+            "name": "Size", "resource_subtype": "number", "precision": 0
+        }
+
+    def test_number_column_keeps_given_precision(self, client):
+        with patch.object(client, "_request", return_value={"data": {"custom_field": {"gid": "f1"}}}) as req:
+            client.add_table_column("t1", "Size", "number", precision=2)
+        assert req.call_args[1]["json_data"]["data"]["custom_field"]["precision"] == 2
+
+    def test_new_column_402_hints_at_seat_limits(self, client):
+        error = AsanaAPIError("API error 402: Custom Fields are not available for free users or guests", 402)
+        with patch.object(client, "_request", side_effect=error):
+            with pytest.raises(AsanaAPIError, match="free/guest seats can't create fields.*--custom-field") as exc:
+                client.add_table_column("t1", "Domain")
+        assert exc.value.status_code == 402
+
+    def test_attaching_existing_field_402_passes_through(self, client):
+        error = AsanaAPIError("API error 402: nope", 402)
+        with patch.object(client, "_request", side_effect=error):
+            with pytest.raises(AsanaAPIError) as exc:
+                client.add_table_column("t1", custom_field="f9")
+        assert "free/guest" not in str(exc.value)
+
     def test_add_column_reuses_existing_field(self, client):
         with patch.object(client, "_request", return_value={"data": {"custom_field": {"gid": "f9"}}}) as req:
             client.add_table_column("t1", custom_field="f9")

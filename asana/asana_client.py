@@ -1676,7 +1676,9 @@ class AsanaClient:
 
         Pass custom_field to reuse an existing workspace-global field; otherwise a
         new global field named `name` of `field_type` is created inline. Tables
-        only take global fields (Asana returns 403 for others).
+        only take global fields (Asana returns 403 for others). Number columns
+        default to precision 0. Creating a field needs a paid seat (402 for
+        free/guest users); attaching an existing one doesn't.
         """
         if custom_field:
             field: Any = custom_field
@@ -1692,15 +1694,25 @@ class AsanaClient:
                 field["enum_options"] = [{"name": o} for o in options]
             elif options:
                 raise ValueError("options only apply to enum and multi_enum columns")
-            if precision is not None:
-                if field_type != "number":
-                    raise ValueError("precision only applies to number columns")
-                field["precision"] = precision
-        result = self._request(
-            "POST",
-            f"tables/{table_gid}/addCustomFieldSetting",
-            json_data={"data": {"custom_field": field}},
-        )
+            if precision is not None and field_type != "number":
+                raise ValueError("precision only applies to number columns")
+            if field_type == "number":
+                # Asana rejects a new number field without precision (400).
+                field["precision"] = 0 if precision is None else precision
+        try:
+            result = self._request(
+                "POST",
+                f"tables/{table_gid}/addCustomFieldSetting",
+                json_data={"data": {"custom_field": field}},
+            )
+        except AsanaAPIError as e:
+            if e.status_code == 402 and not custom_field:
+                raise AsanaAPIError(
+                    f"{e} (free/guest seats can't create fields; have a paid member create it, "
+                    "or attach an existing field with --custom-field)",
+                    402,
+                ) from e
+            raise
         return result.get("data", {}).get("custom_field", {})
 
     def get_records(
@@ -3462,7 +3474,7 @@ Environment:
     acol.add_argument("name", nargs="?", help="New column name")
     acol.add_argument("--type", default="text", choices=COLUMN_TYPES, help="Column type (default: text)")
     acol.add_argument("-o", "--option", action="append", help="Enum option name (repeat for each)")
-    acol.add_argument("--precision", type=int, help="Decimal places for number columns")
+    acol.add_argument("--precision", type=int, help="Decimal places for number columns (default: 0)")
     acol.add_argument("--custom-field", help="Reuse an existing global custom field GID instead")
     acol.set_defaults(func=cmd_add_column)
 
