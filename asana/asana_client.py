@@ -37,7 +37,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import requests
@@ -68,6 +68,17 @@ STORY_FIELDS = (
 )
 NOTIFICATION_PAGE_MAX = 100
 NOTIFICATION_MARK_BATCH = 50
+TABLE_FIELDS = "name,archived,default_access_level,created_by.name,modified_at"
+TABLE_COLUMN_FIELDS = (
+    "custom_field.name,custom_field.resource_subtype,custom_field.precision,"
+    "custom_field.enum_options.name,custom_field.enum_options.enabled"
+)
+RECORD_FIELDS = (
+    "name,modified_at,permalink_url,custom_fields.name,custom_fields.display_value,"
+    "custom_fields.resource_subtype,custom_fields.date_value"
+)
+RECORD_DETAIL_FIELDS = RECORD_FIELDS + ",workspace,table.name,created_at,created_by.name,comment_count"
+COLUMN_TYPES = ("text", "number", "enum", "multi_enum", "date", "people")
 NOTIFICATION_FIELDS = (
     "created_at,created_by.name,is_read,story_resource_subtype,"
     "story.text,story.resource_subtype,work_objects.name,work_objects.resource_type"
@@ -1599,6 +1610,363 @@ class AsanaClient:
         )
         return result.get("data", {})
 
+    # ========== Table & Record Operations ==========
+    #
+    # Records are their own object type (resource_type "record"): task endpoints
+    # and task search never return them. A table's columns are workspace-global
+    # custom fields attached through custom field settings.
+
+    def _get_all(self, endpoint: str, params: Optional[Dict[str, Any]] = None, page_size: int = 100) -> List[Dict[str, Any]]:
+        """GET every page of an offset-paginated list endpoint."""
+        params = dict(params or {})
+        params["limit"] = str(page_size)
+        items: List[Dict[str, Any]] = []
+        while True:
+            result = self._request("GET", endpoint, params)
+            items.extend(result.get("data", []))
+            offset = (result.get("next_page") or {}).get("offset")
+            if not offset:
+                return items
+            params["offset"] = offset
+
+    def get_tables(self, workspace: Optional[str] = None) -> List[Dict[str, Any]]:
+        """All tables in the workspace."""
+        return self._get_all(
+            f"workspaces/{self._get_workspace(workspace)}/tables",
+            {"opt_fields": TABLE_FIELDS},
+        )
+
+    def get_table(self, table_gid: str) -> Dict[str, Any]:
+        """A table plus its columns under "columns" (custom field dicts with enum options).
+
+        GET /tables/{gid} leaves custom_field_settings empty, so the columns come
+        from the table's custom_field_settings endpoint.
+        """
+        table = self._request("GET", f"tables/{table_gid}", {"opt_fields": TABLE_FIELDS}).get("data", {})
+        table["columns"] = self.get_table_columns(table_gid)
+        return table
+
+    def get_table_columns(self, table_gid: str) -> List[Dict[str, Any]]:
+        """The table's columns: custom fields with name, type and enum options."""
+        settings = self._get_all(
+            f"tables/{table_gid}/custom_field_settings", {"opt_fields": TABLE_COLUMN_FIELDS}
+        )
+        return [s.get("custom_field", {}) for s in settings]
+
+    def create_table(self, name: str, workspace: Optional[str] = None) -> Dict[str, Any]:
+        """Create an empty table. Add columns with add_table_column."""
+        data = {"name": name, "workspace": self._get_workspace(workspace)}
+        return self._request("POST", "tables", json_data={"data": data}).get("data", {})
+
+    def delete_table(self, table_gid: str) -> bool:
+        """Delete a table and its records. Its columns stay in the workspace."""
+        self._request("DELETE", f"tables/{table_gid}")
+        return True
+
+    def add_table_column(
+        self,
+        table_gid: str,
+        name: Optional[str] = None,
+        field_type: str = "text",
+        options: Optional[List[str]] = None,
+        precision: Optional[int] = None,
+        custom_field: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Add a column to a table and return its custom field.
+
+        Pass custom_field to reuse an existing workspace-global field; otherwise a
+        new global field named `name` of `field_type` is created inline. Tables
+        only take global fields (Asana returns 403 for others). Number columns
+        default to precision 0. Creating a field needs a paid seat (402 for
+        free/guest users); attaching an existing one doesn't.
+        """
+        if custom_field:
+            field: Any = custom_field
+        else:
+            if not name:
+                raise ValueError("name is required when not reusing a custom field")
+            if field_type not in COLUMN_TYPES:
+                raise ValueError(f"field_type must be one of {', '.join(COLUMN_TYPES)}")
+            field = {"name": name, "resource_subtype": field_type}
+            if field_type in ("enum", "multi_enum"):
+                if not options:
+                    raise ValueError(f"{field_type} columns need at least one option")
+                field["enum_options"] = [{"name": o} for o in options]
+            elif options:
+                raise ValueError("options only apply to enum and multi_enum columns")
+            if precision is not None and field_type != "number":
+                raise ValueError("precision only applies to number columns")
+            if field_type == "number":
+                # Asana rejects a new number field without precision (400).
+                field["precision"] = 0 if precision is None else precision
+        try:
+            result = self._request(
+                "POST",
+                f"tables/{table_gid}/addCustomFieldSetting",
+                json_data={"data": {"custom_field": field}},
+            )
+        except AsanaAPIError as e:
+            if e.status_code == 402 and not custom_field:
+                raise AsanaAPIError(
+                    f"{e} (free/guest seats can't create fields; have a paid member create it, "
+                    "or attach an existing field with --custom-field)",
+                    402,
+                ) from e
+            raise
+        return result.get("data", {}).get("custom_field", {})
+
+    def get_records(
+        self, table_gid: str, modified_since: Optional[str] = None, opt_fields: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Every record in a table (all pages), with column values."""
+        params = {"opt_fields": opt_fields or RECORD_FIELDS}
+        if modified_since:
+            params["modified_since"] = modified_since
+        return self._get_all(f"tables/{table_gid}/records", params)
+
+    def get_record(self, record_gid: str) -> Dict[str, Any]:
+        """A record with its table, column values and permalink."""
+        return self._request("GET", f"records/{record_gid}", {"opt_fields": RECORD_DETAIL_FIELDS}).get("data", {})
+
+    def create_record(
+        self,
+        table_gid: str,
+        name: str,
+        custom_fields: Optional[Dict[str, Any]] = None,
+        unique_fingerprint: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a record. custom_fields maps field GID to an API value (see resolve_record_fields).
+
+        A unique_fingerprint already used in the table raises AsanaAPIError 409.
+        """
+        data: Dict[str, Any] = {"name": name, "table": table_gid}
+        if custom_fields:
+            data["custom_fields"] = custom_fields
+        if unique_fingerprint:
+            data["unique_fingerprint"] = unique_fingerprint
+        result = self._request("POST", "records", {"opt_fields": RECORD_DETAIL_FIELDS}, json_data={"data": data})
+        return self._with_permalink(result.get("data", {}))
+
+    def update_record(
+        self, record_gid: str, name: Optional[str] = None, custom_fields: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Change a record's name and/or column values. A record can't move tables."""
+        data: Dict[str, Any] = {}
+        if name:
+            data["name"] = name
+        if custom_fields:
+            data["custom_fields"] = custom_fields
+        if not data:
+            raise ValueError("No updates provided")
+        result = self._request(
+            "PUT", f"records/{record_gid}", {"opt_fields": RECORD_DETAIL_FIELDS}, json_data={"data": data}
+        )
+        return self._with_permalink(result.get("data", {}))
+
+    @staticmethod
+    def _with_permalink(record: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill permalink_url, which Asana omits from record write responses."""
+        workspace_gid = (record.get("workspace") or {}).get("gid")
+        if not record.get("permalink_url") and workspace_gid and record.get("gid"):
+            record["permalink_url"] = f"https://app.asana.com/1/{workspace_gid}/record/{record['gid']}"
+        return record
+
+    def delete_record(self, record_gid: str) -> bool:
+        """Delete a record."""
+        self._request("DELETE", f"records/{record_gid}")
+        return True
+
+    def search_records(
+        self,
+        text: Optional[str] = None,
+        tables: Optional[List[str]] = None,
+        limit: int = 100,
+        workspace: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search records across the workspace's tables (Premium; one page, at most 100).
+
+        Asana needs at least one filter and indexes writes 10-60s late; use
+        get_records for read-your-writes.
+        """
+        if not text and not tables:
+            raise ValueError("Provide text and/or tables: Asana requires at least one search filter")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        params = {"opt_fields": RECORD_FIELDS + ",table.name", "limit": str(limit)}
+        if text:
+            params["text"] = text
+        if tables:
+            params["tables.any"] = ",".join(tables)
+        endpoint = f"workspaces/{self._get_workspace(workspace)}/records/search"
+        return self._request("GET", endpoint, params).get("data", [])
+
+    def get_record_stories(self, record_gid: str) -> List[Dict[str, Any]]:
+        """All stories (comments and activity) on a record, oldest first."""
+        return self._get_all(f"records/{record_gid}/stories", {"opt_fields": STORY_FIELDS})
+
+    def add_record_comment(self, record_gid: str, text: str) -> Dict[str, Any]:
+        """Comment on a record."""
+        result = self._request("POST", f"records/{record_gid}/stories", json_data={"data": {"text": text}})
+        return result.get("data", {})
+
+    @staticmethod
+    def find_column(columns: List[Dict[str, Any]], key: str) -> Dict[str, Any]:
+        """The column whose name (exact, then case-insensitive) or GID is `key`."""
+        for match in (
+            lambda c: c.get("name") == key,
+            lambda c: (c.get("name") or "").lower() == key.lower(),
+            lambda c: c.get("gid") == key,
+        ):
+            found = [c for c in columns if match(c)]
+            if len(found) == 1:
+                return found[0]
+            if len(found) > 1:
+                raise ValueError(f"Column name {key!r} is ambiguous; use its GID")
+        names = ", ".join(repr(c.get("name")) for c in columns) or "none"
+        raise ValueError(f"No column {key!r} on this table. Columns: {names}")
+
+    @classmethod
+    def resolve_record_fields(cls, columns: List[Dict[str, Any]], values: Dict[str, Any]) -> Dict[str, Any]:
+        """Turn {column name or GID: value} into the {field GID: API value} Asana expects.
+
+        Enum options resolve by name (case-insensitive) or GID; multi_enum and
+        people take lists or comma-separated strings; dates take YYYY-MM-DD.
+        An empty string or None clears the value. Non-string values pass
+        through, so JSON input can already be in API form.
+        """
+        resolved: Dict[str, Any] = {}
+        for key, value in values.items():
+            column = cls.find_column(columns, key)
+            resolved[column["gid"]] = cls._column_value(column, value)
+        return resolved
+
+    @classmethod
+    def _column_value(cls, column: Dict[str, Any], value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        kind = column.get("resource_subtype") or column.get("type")
+        if kind == "number":
+            if isinstance(value, (int, float)):
+                return value
+            try:
+                number = float(value)
+            except ValueError:
+                raise ValueError(f"{column.get('name')}: {value!r} is not a number")
+            return int(number) if number.is_integer() else number
+        if kind == "enum":
+            return cls._enum_option(column, value) if isinstance(value, str) else value
+        if kind == "multi_enum":
+            return [cls._enum_option(column, v) for v in cls._as_list(value)]
+        if kind == "people":
+            return cls._as_list(value)
+        if kind == "date":
+            return {"date": value} if isinstance(value, str) else value
+        return value
+
+    @staticmethod
+    def _as_list(value: Any) -> List[Any]:
+        if isinstance(value, list):
+            return value
+        return [v.strip() for v in str(value).split(",") if v.strip()]
+
+    @staticmethod
+    def _enum_option(column: Dict[str, Any], value: str) -> str:
+        options = column.get("enum_options") or []
+        for option in options:
+            if option.get("gid") == value or (option.get("name") or "").lower() == value.lower():
+                return option["gid"]
+        names = ", ".join(repr(o.get("name")) for o in options if o.get("enabled", True))
+        raise ValueError(f"{column.get('name')}: no option {value!r}. Options: {names}")
+
+    @staticmethod
+    def record_values(record: Dict[str, Any]) -> Dict[str, Any]:
+        """{column name: display value} for a record; all-day dates as YYYY-MM-DD."""
+        values = {}
+        for f in record.get("custom_fields") or []:
+            date_value = f.get("date_value") or {}
+            if date_value.get("date") and not date_value.get("date_time"):
+                values[f.get("name")] = date_value["date"]
+            else:
+                values[f.get("name")] = f.get("display_value")
+        return values
+
+    def upsert_record(
+        self,
+        table_gid: str,
+        name: str,
+        values: Dict[str, Any],
+        key: str,
+        fingerprint: Optional[str] = None,
+        columns: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Create a record, or update the one already holding the same key.
+
+        `key` is the column that identifies the object (e.g. "Domain"), or "name"
+        for the record name. The key's value is sent as the record's
+        unique_fingerprint (or `fingerprint`, if given), so Asana refuses a
+        duplicate with 409. The 409 carries no GID and the fingerprint can't be
+        read back, so the existing record is found by scanning the table for the
+        key value. Returns ("created" | "updated", record).
+        """
+        columns = columns if columns is not None else self.get_table_columns(table_gid)
+        key_value = name if key.lower() == "name" else self._key_value(columns, values, key)
+        fields = self.resolve_record_fields(columns, values)
+        try:
+            record = self.create_record(table_gid, name, fields, unique_fingerprint=fingerprint or str(key_value))
+            return "created", record
+        except AsanaAPIError as e:
+            if e.status_code != 409:
+                raise
+        existing = self.find_record(table_gid, key, key_value, columns)
+        if not existing:
+            raise AsanaError(
+                f"A record in table {table_gid} already has fingerprint {fingerprint or key_value!r}, "
+                f"but none has {key} = {key_value!r} (its {key} was probably edited). Update it by GID."
+            )
+        return "updated", self.update_record(existing["gid"], name=name, custom_fields=fields or None)
+
+    def find_record(
+        self, table_gid: str, key: str, value: Any, columns: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """The first record whose `key` column (or "name") displays `value`."""
+        index = self.index_records(table_gid, key, columns)
+        return index.get(self._normalize_key(value))
+
+    def index_records(
+        self, table_gid: str, key: str, columns: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """{normalized key value: record} for every record in the table."""
+        if key.lower() == "name":
+            column_gid = None
+        else:
+            columns = columns if columns is not None else self.get_table_columns(table_gid)
+            column_gid = self.find_column(columns, key)["gid"]
+        index: Dict[str, Dict[str, Any]] = {}
+        for record in self.get_records(table_gid, opt_fields="name,custom_fields.display_value"):
+            if column_gid is None:
+                value = record.get("name")
+            else:
+                value = next(
+                    (f.get("display_value") for f in record.get("custom_fields") or [] if f.get("gid") == column_gid),
+                    None,
+                )
+            if value not in (None, ""):
+                index.setdefault(self._normalize_key(value), record)
+        return index
+
+    @staticmethod
+    def _normalize_key(value: Any) -> str:
+        return str(value).strip().lower()
+
+    def _key_value(self, columns: List[Dict[str, Any]], values: Dict[str, Any], key: str) -> Any:
+        column = self.find_column(columns, key)
+        for k, v in values.items():
+            if k == column["gid"] or self.find_column(columns, k)["gid"] == column["gid"]:
+                if v in (None, ""):
+                    break
+                return v
+        raise ValueError(f"Upsert needs a value for the key column {column.get('name')!r}")
+
 
 # ========== CLI ==========
 
@@ -2458,6 +2826,281 @@ def cmd_goal_metric(client: AsanaClient, args):
     print(f"Updated goal {args.goal_gid} metric to {args.value}")
 
 
+# =============================================================================
+# Tables & Records Commands
+# =============================================================================
+
+
+def _parse_field_args(args) -> Dict[str, Any]:
+    """Collect --fields-json then --field "Column=value" pairs (later wins)."""
+    values: Dict[str, Any] = {}
+    if getattr(args, "fields_json", None):
+        loaded = json.loads(args.fields_json)
+        if not isinstance(loaded, dict):
+            raise AsanaError("--fields-json must be a JSON object of {column: value}")
+        values.update(loaded)
+    for pair in getattr(args, "field", None) or []:
+        column, sep, value = pair.partition("=")
+        if not sep or not column.strip():
+            raise AsanaError(f"--field must look like 'Column=value', got {pair!r}")
+        values[column.strip()] = value.strip()
+    return values
+
+
+def _print_record_line(record: dict, verbose: bool) -> None:
+    values = "  ·  ".join(
+        f"{k}: {v}" for k, v in AsanaClient.record_values(record).items() if v not in (None, "")
+    )
+    prefix = f"{record.get('gid', ''):<20} " if verbose else ""
+    print(f"{prefix}{record.get('name', 'Untitled')}" + (f"  —  {values}" if values else ""))
+
+
+def _print_record(record: dict) -> None:
+    print(f"Record: {record.get('name')}")
+    print(f"GID: {record.get('gid')}")
+    if record.get("permalink_url"):
+        print(f"URL: {record['permalink_url']}")
+    table = record.get("table") or {}
+    if table:
+        print(f"Table: {table.get('name')} ({table.get('gid')})")
+    for column, value in AsanaClient.record_values(record).items():
+        print(f"  {column}: {value if value not in (None, '') else '-'}")
+
+
+def cmd_tables(client: AsanaClient, args):
+    """List tables in the workspace."""
+    tables = client.get_tables()
+    if args.json:
+        print(json.dumps(tables, indent=2))
+        return
+    for t in tables:
+        archived = " (archived)" if t.get("archived") else ""
+        prefix = f"{t['gid']:<20} " if args.verbose else ""
+        print(f"{prefix}{t.get('name')}{archived}")
+    print(f"\n({len(tables)} tables)")
+
+
+def cmd_table(client: AsanaClient, args):
+    """Show a table and its columns."""
+    table = client.get_table(args.table_gid)
+    if args.json:
+        print(json.dumps(table, indent=2))
+        return
+    print(f"Table: {table.get('name')}")
+    print(f"GID: {table.get('gid')}")
+    print(f"\nColumns ({len(table['columns'])}):")
+    for c in table["columns"]:
+        kind = c.get("resource_subtype") or c.get("type") or "?"
+        print(f"  {c.get('name')} ({c.get('gid')}) [{kind}]")
+        for option in c.get("enum_options") or []:
+            if option.get("enabled", True):
+                print(f"      {option.get('name', ''):<30} {option.get('gid')}")
+
+
+def cmd_create_table(client: AsanaClient, args):
+    """Create a table."""
+    table = client.create_table(args.name)
+    if args.json:
+        print(json.dumps(table, indent=2))
+        return
+    print(f"Created table: {table.get('name')}")
+    print(f"GID: {table.get('gid')}")
+
+
+def cmd_delete_table(client: AsanaClient, args):
+    """Delete a table."""
+    client.delete_table(args.table_gid)
+    if args.json:
+        print(json.dumps({"deleted": True, "gid": args.table_gid}, indent=2))
+        return
+    print(f"Deleted table {args.table_gid} (its columns remain as workspace custom fields)")
+
+
+def cmd_add_column(client: AsanaClient, args):
+    """Add a column to a table."""
+    if not args.name and not args.custom_field:
+        raise AsanaError("Give a column name, or --custom-field to reuse an existing field")
+    field = client.add_table_column(
+        args.table_gid,
+        name=args.name,
+        field_type=args.type,
+        options=args.option,
+        precision=args.precision,
+        custom_field=args.custom_field,
+    )
+    if args.json:
+        print(json.dumps(field, indent=2))
+        return
+    print(f"Added column {field.get('name')} ({field.get('gid')}) [{field.get('resource_subtype')}]")
+    for option in field.get("enum_options") or []:
+        print(f"      {option.get('name', ''):<30} {option.get('gid')}")
+
+
+def cmd_records(client: AsanaClient, args):
+    """List every record in a table."""
+    records = client.get_records(args.table_gid, modified_since=args.modified_since)
+    if args.json:
+        print(json.dumps(records, indent=2))
+        return
+    for r in records:
+        _print_record_line(r, args.verbose)
+    print(f"\n({len(records)} records)")
+
+
+def cmd_record(client: AsanaClient, args):
+    """Show a record with its values and comments."""
+    record = client.get_record(args.record_gid)
+    stories = client.get_record_stories(args.record_gid)
+    comments = [s for s in stories if s.get("resource_subtype") == "comment_added"]
+    if args.json:
+        record["stories"] = stories
+        print(json.dumps(record, indent=2))
+        return
+    _print_record(record)
+    if comments:
+        print(f"\nComments ({len(comments)}):")
+        for s in comments:
+            author = (s.get("created_by") or {}).get("name", "System")
+            print(f"  [{s.get('created_at', '')[:10]}] {author}: {s.get('text', '')}")
+
+
+def _record_result(record: dict, args, verb: str) -> None:
+    if args.json:
+        print(json.dumps(record, indent=2))
+        return
+    print(f"{verb} record: {record.get('name')}")
+    print(f"GID: {record.get('gid')}")
+    if record.get("permalink_url"):
+        print(f"URL: {record['permalink_url']}")
+
+
+def cmd_create_record(client: AsanaClient, args):
+    """Create a record, resolving column and option names."""
+    columns = client.get_table_columns(args.table)
+    fields = client.resolve_record_fields(columns, _parse_field_args(args))
+    record = client.create_record(args.table, args.name, fields, unique_fingerprint=args.fingerprint)
+    _record_result(record, args, "Created")
+
+
+def cmd_update_record(client: AsanaClient, args):
+    """Update a record's name or values."""
+    values = _parse_field_args(args)
+    fields = None
+    if values:
+        table_gid = (client.get_record(args.record_gid).get("table") or {}).get("gid")
+        fields = client.resolve_record_fields(client.get_table_columns(table_gid), values)
+    record = client.update_record(args.record_gid, name=args.name, custom_fields=fields)
+    _record_result(record, args, "Updated")
+
+
+def cmd_upsert_record(client: AsanaClient, args):
+    """Create a record or update the one with the same key."""
+    action, record = client.upsert_record(
+        args.table, args.name, _parse_field_args(args), key=args.key, fingerprint=args.fingerprint
+    )
+    if args.json:
+        print(json.dumps({"action": action, "record": record}, indent=2))
+        return
+    _record_result(record, args, action.capitalize())
+
+
+def cmd_delete_record(client: AsanaClient, args):
+    """Delete a record."""
+    client.delete_record(args.record_gid)
+    if args.json:
+        print(json.dumps({"deleted": True, "gid": args.record_gid}, indent=2))
+        return
+    print(f"Deleted record {args.record_gid}")
+
+
+def cmd_search_records(client: AsanaClient, args):
+    """Search records across tables."""
+    records = client.search_records(text=args.text, tables=args.table, limit=args.limit)
+    if args.json:
+        print(json.dumps(records, indent=2))
+        return
+    for r in records:
+        _print_record_line(r, args.verbose)
+    print(format_count(len(records), args.limit, "records"))
+
+
+def cmd_record_comment(client: AsanaClient, args):
+    """Comment on a record."""
+    story = client.add_record_comment(args.record_gid, args.text)
+    if args.json:
+        print(json.dumps(story, indent=2))
+        return
+    print(f"Comment added to record {args.record_gid}")
+
+
+def _read_rows(path: str) -> List[Dict[str, Any]]:
+    """Rows from a .csv (header row) or .jsonl/.json file."""
+    import csv
+
+    with open(path, newline="", encoding="utf-8") as fh:
+        if path.lower().endswith(".csv"):
+            return list(csv.DictReader(fh))
+        text = fh.read().strip()
+    if path.lower().endswith(".json"):
+        rows = json.loads(text)
+        if not isinstance(rows, list):
+            raise AsanaError(f"{path}: expected a JSON array of objects")
+        return rows
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def cmd_import_records(client: AsanaClient, args):
+    """Bulk upsert records from CSV or JSONL, matched on a key column."""
+    rows = _read_rows(args.file)
+    columns = client.get_table_columns(args.table_gid)
+    existing = client.index_records(args.table_gid, args.key, columns)
+    counts = {"created": 0, "updated": 0, "skipped": 0, "failed": 0}
+    results = []
+    for number, row in enumerate(rows, start=1):
+        row = dict(row)
+        name = row.pop(args.name_column, None)
+        values = {k: v for k, v in row.items() if k and not (args.skip_empty and v in (None, ""))}
+        key_value = name if args.key.lower() == "name" else next(
+            (v for k, v in values.items() if k.strip().lower() == args.key.strip().lower()), None
+        )
+        if not name or key_value in (None, ""):
+            counts["skipped"] += 1
+            results.append({"row": number, "action": "skipped", "error": "missing name or key"})
+            continue
+        match = existing.get(client._normalize_key(key_value))
+        try:
+            if args.dry_run:
+                client.resolve_record_fields(columns, values)
+                action, record = ("updated" if match else "created"), match or {"name": name}
+            elif match:
+                record = client.update_record(
+                    match["gid"], name=name, custom_fields=client.resolve_record_fields(columns, values) or None
+                )
+                action = "updated"
+            else:
+                action, record = client.upsert_record(
+                    args.table_gid, name, values, key=args.key, columns=columns
+                )
+                existing[client._normalize_key(key_value)] = record
+        except (AsanaError, ValueError) as e:
+            counts["failed"] += 1
+            results.append({"row": number, "name": name, "action": "failed", "error": str(e)})
+            if not args.json:
+                print(f"row {number} ({name}): FAILED {e}", file=sys.stderr)
+            continue
+        counts[action] += 1
+        results.append({"row": number, "name": name, "action": action, "gid": record.get("gid")})
+        if args.verbose and not args.json:
+            print(f"row {number}: {action} {name} {record.get('gid') or ''}")
+    if args.json:
+        print(json.dumps({"counts": counts, "dry_run": args.dry_run, "results": results}, indent=2))
+    else:
+        prefix = "Dry run: would have " if args.dry_run else ""
+        print(prefix + ", ".join(f"{v} {k}" for k, v in counts.items()))
+    if counts["failed"]:
+        sys.exit(1)
+
+
 def main():
     epilog = """\
 Examples:
@@ -2478,6 +3121,9 @@ Examples:
   asana followers rm <gid> me   Stop following a task
   asana inbox                   List unarchived Inbox notifications
   asana inbox read <gid>...     Mark notifications read
+  asana table <table>           Show a table's columns and enum options
+  asana records <table>         List every record in a table
+  asana upsert-record "Acme" -t <table> -k Domain -f "Domain=acme.example" -f "Stage=Lead"
 
 Environment:
   ASANA_ACCESS_TOKEN   Required. Personal access token.
@@ -2807,6 +3453,91 @@ Environment:
     goal_metric.add_argument("value", type=float, help="Current metric value")
     goal_metric.set_defaults(func=cmd_goal_metric, no_client=True)
 
+    # tables & records
+    tables_p = subparsers.add_parser("tables", help="List tables in workspace")
+    tables_p.set_defaults(func=cmd_tables)
+
+    table_p = subparsers.add_parser("table", help="Show a table's columns (names, GIDs, types, enum options)")
+    table_p.add_argument("table_gid", help="Table GID")
+    table_p.set_defaults(func=cmd_table)
+
+    ctable = subparsers.add_parser("create-table", help="Create a table")
+    ctable.add_argument("name", help="Table name")
+    ctable.set_defaults(func=cmd_create_table)
+
+    dtable = subparsers.add_parser("delete-table", help="Delete a table and its records")
+    dtable.add_argument("table_gid", help="Table GID")
+    dtable.set_defaults(func=cmd_delete_table)
+
+    acol = subparsers.add_parser("add-column", help="Add a column (workspace custom field) to a table")
+    acol.add_argument("table_gid", help="Table GID")
+    acol.add_argument("name", nargs="?", help="New column name")
+    acol.add_argument("--type", default="text", choices=COLUMN_TYPES, help="Column type (default: text)")
+    acol.add_argument("-o", "--option", action="append", help="Enum option name (repeat for each)")
+    acol.add_argument("--precision", type=int, help="Decimal places for number columns (default: 0)")
+    acol.add_argument("--custom-field", help="Reuse an existing global custom field GID instead")
+    acol.set_defaults(func=cmd_add_column)
+
+    def _field_args(p):
+        p.add_argument("-f", "--field", action="append", metavar="COLUMN=VALUE",
+                       help="Column value by column name; enum options by name (repeatable)")
+        p.add_argument("--fields-json", help='JSON object of {column: value}, e.g. \'{"Stage": "Lead"}\'')
+
+    recs = subparsers.add_parser("records", help="List every record in a table, with values")
+    recs.add_argument("table_gid", help="Table GID")
+    recs.add_argument("--modified-since", help="Only records modified since this ISO timestamp")
+    recs.set_defaults(func=cmd_records)
+
+    rec = subparsers.add_parser("record", help="Show a record with values and comments")
+    rec.add_argument("record_gid", help="Record GID")
+    rec.set_defaults(func=cmd_record)
+
+    crec = subparsers.add_parser("create-record", help="Create a record in a table")
+    crec.add_argument("name", help="Record name")
+    crec.add_argument("-t", "--table", required=True, help="Table GID")
+    _field_args(crec)
+    crec.add_argument("--fingerprint", help="unique_fingerprint; a repeat fails with 409")
+    crec.set_defaults(func=cmd_create_record)
+
+    urec = subparsers.add_parser("update-record", help="Update a record's name or values")
+    urec.add_argument("record_gid", help="Record GID")
+    urec.add_argument("--name", help="New name")
+    _field_args(urec)
+    urec.set_defaults(func=cmd_update_record)
+
+    uprec = subparsers.add_parser("upsert-record", help="Create a record, or update the one with the same key")
+    uprec.add_argument("name", help="Record name")
+    uprec.add_argument("-t", "--table", required=True, help="Table GID")
+    uprec.add_argument("-k", "--key", required=True,
+                       help='Column that identifies the object (e.g. "Domain"), or "name"')
+    _field_args(uprec)
+    uprec.add_argument("--fingerprint", help="unique_fingerprint override (default: the key value)")
+    uprec.set_defaults(func=cmd_upsert_record)
+
+    drec = subparsers.add_parser("delete-record", help="Delete a record")
+    drec.add_argument("record_gid", help="Record GID")
+    drec.set_defaults(func=cmd_delete_record)
+
+    srec = subparsers.add_parser("search-records", help="Search records (Premium; indexing lags 10-60s)")
+    srec.add_argument("text", nargs="?", help="Search text")
+    srec.add_argument("-t", "--table", action="append", help="Limit to a table GID (repeatable)")
+    srec.add_argument("-l", "--limit", type=int, default=100)
+    srec.set_defaults(func=cmd_search_records)
+
+    rcom = subparsers.add_parser("record-comment", help="Comment on a record")
+    rcom.add_argument("record_gid", help="Record GID")
+    rcom.add_argument("text", help="Comment text")
+    rcom.set_defaults(func=cmd_record_comment)
+
+    irec = subparsers.add_parser("import-records", help="Bulk upsert records from CSV/JSONL by a key column")
+    irec.add_argument("table_gid", help="Table GID")
+    irec.add_argument("file", help=".csv (header row), .jsonl, or .json array")
+    irec.add_argument("-k", "--key", required=True, help='Key column (e.g. "Domain"), or "name"')
+    irec.add_argument("--name-column", default="Name", help="Column holding the record name (default: Name)")
+    irec.add_argument("--skip-empty", action="store_true", help="Leave a column alone when the row's cell is empty")
+    irec.add_argument("--dry-run", action="store_true", help="Resolve every row, write nothing")
+    irec.set_defaults(func=cmd_import_records)
+
     # help
     help_parser = subparsers.add_parser("help", help="Show help for a command")
     help_parser.add_argument("help_command", nargs="?", help="Command to get help for")
@@ -2847,7 +3578,7 @@ Environment:
         else:
             client = AsanaClient()
             args.func(client, args)
-    except AsanaError as e:
+    except (AsanaError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
