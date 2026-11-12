@@ -30,6 +30,7 @@ This directory contains two complementary clients:
 | Custom field caching | - | ✓ |
 | Attachments (upload/download) | - | ✓ |
 | Goals | - | ✓ |
+| Tables & Records | ✓ | - |
 
 ## Features
 
@@ -155,6 +156,26 @@ asana my-tasks -i
 | `inbox read\|unread <gid>...` | Mark notifications read, or unread (unread also unarchives) |
 
 Asana's public API has no archive action for Inbox notifications.
+
+### Tables & Records
+
+Records are rows in Asana tables: their own object type, not tasks. Column values
+take column names and enum option names (`-f "Stage=Lead"`); the CLI resolves GIDs.
+
+| Command | Description |
+|---------|-------------|
+| `tables` | List tables in the workspace |
+| `table <gid>` | Show a table's columns: names, GIDs, types, enum options |
+| `create-table <name>` / `delete-table <gid>` | Create or delete a table |
+| `add-column <table> <name> [--type T] [-o opt]...` | Add a column (text, number, enum, multi_enum, date, people) |
+| `records <table> [--modified-since TS]` | Every record in a table, all pages |
+| `record <gid>` | A record's values, URL, and comments |
+| `create-record <name> -t <table> [-f Col=val]... [--fingerprint F]` | Create a record |
+| `update-record <gid> [--name N] [-f Col=val]...` | Update a record |
+| `upsert-record <name> -t <table> -k <key column> [-f Col=val]...` | Create, or update the record with the same key |
+| `import-records <table> <file> -k <key column> [--dry-run]` | Bulk upsert from CSV, JSONL, or JSON |
+| `search-records [text] [-t table]...` | Search records (Premium; lags writes 10-60s) |
+| `record-comment <gid> <text>` / `delete-record <gid>` | Comment on or delete a record |
 
 ## Examples
 

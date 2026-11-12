@@ -182,6 +182,82 @@ asana update-goal <gid> --status green --notes "On track"
 asana goal-metric <gid> 75             # Update metric progress
 ```
 
+### Tables & Records
+
+A **record** is a row in an Asana **table**: durable metadata about an object
+(a company, a vendor, a customer account) that you keep updating. A **task** is
+work that gets done and closed. Use a record when the thing outlives any piece
+of work about it; use a task for the work, and point the task at the record by
+pasting the record URL in its description.
+
+Records are their own object type. Task commands (`task`, `tasks`, `search`)
+never return them, and `asana task <record_gid>` fails with 404.
+
+```bash
+asana -v tables                                  # Tables in the workspace
+asana table <table_gid>                          # Columns: names, GIDs, types, enum options
+asana create-table "Accounts"
+asana add-column <table_gid> "Domain"            # text (default)
+asana add-column <table_gid> "Stage" --type enum -o Lead -o Customer -o Churned
+asana add-column <table_gid> "Tags" --type multi_enum -o Partner -o Reseller
+asana add-column <table_gid> "Employees" --type number --precision 0
+asana add-column <table_gid> "Since" --type date
+asana add-column <table_gid> "Owner" --type people
+asana add-column <table_gid> --custom-field <field_gid>   # Reuse an existing global field
+asana delete-table <table_gid>                   # Deletes its records; columns stay in the workspace
+
+asana -v records <table_gid>                     # Every record, all pages, with values
+asana records <table_gid> --modified-since 2026-01-01T00:00:00Z
+asana record <record_gid>                        # Values, URL, and comments
+asana create-record "Acme" -t <table_gid> -f "Domain=acme.example" -f "Stage=Lead"
+asana update-record <record_gid> -f "Stage=Customer" --name "Acme Inc"
+asana upsert-record "Acme" -t <table_gid> -k Domain -f "Domain=acme.example" -f "Stage=Lead"
+asana import-records <table_gid> accounts.csv -k Domain       # Bulk upsert (CSV/JSONL/JSON)
+asana import-records <table_gid> accounts.csv -k Domain --dry-run --skip-empty
+asana record-comment <record_gid> "Renewal call booked"
+asana search-records "acme" -t <table_gid>
+asana delete-record <record_gid>
+```
+
+**Names, not GIDs.** `-f "Column=value"` (repeatable) and `--fields-json
+'{"Column": value}'` take column **names** and enum option **names**, matched
+case-insensitively; the CLI reads the table's columns and sends GIDs. GIDs are
+accepted too. Values by type: text as-is; number parsed; enum one option name;
+multi_enum and people comma-separated (people take `me`, an email, or a user
+GID); date `YYYY-MM-DD`. An empty value (`-f "Stage="`) clears the field. A
+misspelled column or option fails before anything is written, listing the valid
+ones.
+
+**Upsert by key.** `upsert-record -k <column>` (or `-k name`) treats that column
+as the object's identity. The key value is sent as the record's
+`unique_fingerprint`, so Asana refuses a second record with the same key (409).
+On a 409 the CLI finds the existing record by scanning the table for the key
+value and updates it. Asana's 409 carries no GID and the fingerprint can't be
+read back, so the key must also be stored in a column (or be the name).
+`import-records` reads the table once, updates rows whose key matches (case-
+insensitive), and upserts the rest; the row's `Name` column (`--name-column`)
+is the record name and every other column header must match a table column.
+It prints created/updated/skipped/failed counts and exits 1 if any row failed.
+
+Gotchas:
+- **No description, no attachments.** Records have a name, column values, and
+  comments. Anything long goes in a text column or a comment.
+- **Columns first.** A record can only hold values for columns already on its
+  table; there's no force-write. `add-column` creates a workspace-global custom
+  field (tables only take global fields), so pick names that won't collide.
+- **Deleting a table leaves its columns** as workspace custom fields. Delete them
+  separately if they were only for that table.
+- **Task reference fields can't point at records.** Store the record GID or URL
+  (`https://app.asana.com/1/<workspace_gid>/record/<record_gid>`) in a text field
+  or the task description.
+- **Search** (`search-records`) is Premium-only (402 otherwise), needs text or
+  `-t`, returns one page (max 100), and lags writes by 10-60s. For
+  read-your-writes or a complete list, use `records`.
+- **Records created outside the CLI** have no fingerprint, so `upsert-record`'s
+  create can succeed and make a duplicate. `import-records` matches on the key
+  column first, so it doesn't.
+- Record comments show in `record`; field-change history isn't returned.
+
 ### Status Updates
 
 ```bash
@@ -264,6 +340,8 @@ Caveats:
 2. **Using `--plain` when markdown is intended** → Only use `--plain` when you explicitly want literal text without rich formatting.
 3. **Setting recurrence without a due date** → Always pair `--recurrence-json` with `-d`/`--due` on create.
 4. **Adding subtasks to the project** → Use `--parent` (not `-p/--project`) for subtasks. Only the parent task belongs in the project; subtasks live under it.
+5. **Looking for records with task commands** → Records aren't tasks. Use `records`, `record`, and `search-records`.
+6. **Passing GIDs to record commands by hand** → Use column and option names with `-f`; run `asana table <gid>` to see them.
 
 ## Project Configuration
 
