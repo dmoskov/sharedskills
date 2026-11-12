@@ -282,6 +282,73 @@ Status types: `on_track`, `at_risk`, `off_track`, `on_hold`, `complete`, `achiev
 
 **Note:** Setting a goal's status via `update-goal --status` auto-creates an empty status update. Delete it with `status-update delete`, then create one with content.
 
+## How the workgraph looks to agents vs humans
+
+In the Asana UI a link to a task, record, or project shows as a chip with the
+object's **name**. The API often returns only a URL or GID instead. An agent
+reading raw API output sees opaque numbers where a person sees names. Each
+surface below was checked against the live API; the UI column describes what
+people see, and items marked *(unverified)* weren't checked in the UI.
+
+| Surface | UI shows | API returns | CLI shows |
+|---|---|---|---|
+| Text custom field holding an Asana URL | A chip with the name *(reported; unverified)* | `text_value` and `display_value` are the raw URL string | `task`, `record`: `Name (record <gid>)`, resolved by default. `tasks`, `search`, `records`: raw URL unless `--resolve-links` |
+| People field | Names | `display_value` has names; `people_value` has GIDs and names | Names |
+| Enum / multi-enum field | Option names | `display_value` has option names | Option names |
+| Description, `html_notes` | Chips and `@Name` | `<a data-asana-gid=… data-asana-type=…>Name</a>` with the live name | `[Name](url)` (rendered from `html_notes`) |
+| Description, `notes` (plain) | — | Every chip becomes a bare URL; names are gone. Mentions become `https://app.asana.com/0/<id>/`, which doesn't name the user | Not used for display |
+| Comments, `html_text` | Chips and `@Name` | Same as `html_notes` | `stories`, `record`: `[Name](url)` and `[@Name](url)` |
+| Comments, `text` (plain) | — | Bare URLs; names gone | Not used for comments |
+
+Records show up as `data-asana-type="record_item"` in rich text, and as
+`resource_type: "record"` everywhere else.
+
+**What resolution costs.** Every distinct linked object needs a lookup. The
+CLI dedupes GIDs, caches them for the run, and sends up to 10 lookups per
+`POST /batch` call. Batching saves HTTP round trips but not quota: each lookup
+still counts against Asana's rate limit. Legacy `https://app.asana.com/0/<gid>/`
+links don't say what kind of object they are, so the CLI tries project, then
+record, then task, which costs up to 3 lookups each. Links you can't access, or
+that point to deleted objects, keep their URL with a reason such as `(no
+access)` or `(not found)`; they never fail the command. In `--json`, a field
+with links gets `"links": [{"gid", "resource_type", "name", "url"}]`, with
+`name: null` and a `reason` when a lookup fails. The raw value is unchanged.
+
+```bash
+asana task <gid>                         # Fields show "Name (record <gid>)"
+asana task <gid> --no-resolve-links      # Raw URLs, no extra calls
+asana tasks -p <project_gid> --resolve-links
+asana search "acme" --resolve-links
+asana records <table_gid> --resolve-links
+asana record <gid>                       # Resolved by default; --no-resolve-links to skip
+asana stories <task_gid>                 # Comments keep link names and @mentions
+```
+
+**Writing data people will read** (verified unless marked):
+- **Link with the canonical URL** (`permalink_url`, e.g.
+  `https://app.asana.com/1/<ws>/record/<gid>`). In descriptions and comments,
+  plain-text writes (`notes`, `text`, and CLI markdown) turn a bare Asana URL
+  into a chip. An HTML write (`html_notes`, `html_text`) only does that when the
+  URL is inside `<a href="…">`. A bare URL in HTML stays plain text.
+- **Anchor text is replaced.** Asana renders an Asana link with the object's
+  current name, so `[see the account](<record url>)` reads as the record's name.
+  Put any context outside the link.
+- **Mention people with `<a data-asana-gid="<user_gid>"/>`** in HTML, or use a
+  people field, rather than typing their name. Asana renders `@Name` for the
+  mention, and people fields are filterable.
+- **To link a record to a record, or a task to a record, put the URL in a text
+  field.** Reference fields can't target records: creating one with
+  `input_restrictions: ["record"]` fails with
+  `custom_field_reference_invalid_input_resource_type`.
+- **Keep a plain-text name next to a link** when agents need to filter or search
+  on it. Search and filters match the stored text, which is the URL. For
+  example, a "Company" text column alongside a "Company link" column.
+
+**Reading data people wrote:** use `html_notes` and `html_text`, not `notes` and
+`text`, when the names matter; the CLI does this already. Expect bare URLs and
+GIDs in text fields, and resolve them (the CLI does this for `task` and `record`
+by default) before reasoning about what they point to.
+
 ## Output Options
 
 | Flag | Effect |

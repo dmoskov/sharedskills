@@ -177,6 +177,16 @@ take column names and enum option names (`-f "Stage=Lead"`); the CLI resolves GI
 | `search-records [text] [-t table]...` | Search records (Premium; lags writes 10-60s) |
 | `record-comment <gid> <text>` / `delete-record <gid>` | Comment on or delete a record |
 
+### Link names
+
+A text field holding an Asana URL comes back from the API as the bare URL, while
+the UI shows the linked object's name. `task` and `record` look those names up
+by default (`--no-resolve-links` to skip); `tasks`, `search` and `records` do it
+with `--resolve-links`. Lookups go through `POST /batch` (10 per call) and are
+cached per run. `--json` adds `"links": [{"gid", "resource_type", "name", "url"}]`
+to each such field. Comments (`stories`, `record`) render from `html_text`, so
+linked objects and @-mentions keep their names. See `asana_links.py`.
+
 ## Examples
 
 ```bash

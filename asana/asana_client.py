@@ -45,6 +45,7 @@ except ImportError:
     print("Error: requests package required. Install with: pip install requests")
     sys.exit(1)
 
+from asana_links import LinkResolver, annotate_objects, display_with_links
 from asana_to_markdown import asana_html_to_markdown
 from markdown_to_asana import markdown_to_asana_html
 
@@ -75,9 +76,10 @@ TABLE_COLUMN_FIELDS = (
 )
 RECORD_FIELDS = (
     "name,modified_at,permalink_url,custom_fields.name,custom_fields.display_value,"
-    "custom_fields.resource_subtype,custom_fields.date_value"
+    "custom_fields.text_value,custom_fields.resource_subtype,custom_fields.date_value"
 )
 RECORD_DETAIL_FIELDS = RECORD_FIELDS + ",workspace,table.name,created_at,created_by.name,comment_count"
+BATCH_MAX_ACTIONS = 10
 COLUMN_TYPES = ("text", "number", "enum", "multi_enum", "date", "people")
 NOTIFICATION_FIELDS = (
     "created_at,created_by.name,is_read,story_resource_subtype,"
@@ -360,7 +362,7 @@ class AsanaClient:
         """Get task details."""
         params = {
             "opt_fields": "name,notes,html_notes,start_on,due_on,due_at,completed,assignee.name,projects.name,"
-                          "custom_fields.name,custom_fields.display_value,tags.name,"
+                          "custom_fields.name,custom_fields.display_value,custom_fields.text_value,tags.name,"
                           "memberships.section.name,dependencies,dependents,num_subtasks,recurrence,"
                           "liked,num_likes," + EFFECTIVE_MEMBERSHIP_FIELDS
         }
@@ -674,7 +676,7 @@ class AsanaClient:
     def get_stories(self, task_gid: str, limit: int = 50, opt_fields: str = None) -> List[Dict[str, Any]]:
         """Get all stories (comments, activity) for a task."""
         params = {
-            "opt_fields": opt_fields or "created_at,created_by.name,text,type,resource_subtype",
+            "opt_fields": opt_fields or "created_at,created_by.name,text,html_text,type,resource_subtype",
             "limit": str(limit),
         }
         result = self._request("GET", f"tasks/{task_gid}/stories", params)
@@ -1610,6 +1612,26 @@ class AsanaClient:
         )
         return result.get("data", {})
 
+    # ========== Batch ==========
+
+    def batch_get(self, paths: List[str], fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """GET many paths through POST /batch, 10 per call. Returns one result per path, in order.
+
+        Each result is {"status_code", "body"}; a 403 or 404 on one path comes
+        back as that path's result, not an exception. Every action still counts
+        against the rate limit.
+        """
+        results: List[Dict[str, Any]] = []
+        for start in range(0, len(paths), BATCH_MAX_ACTIONS):
+            actions = []
+            for path in paths[start:start + BATCH_MAX_ACTIONS]:
+                action: Dict[str, Any] = {"method": "get", "relative_path": path}
+                if fields:
+                    action["options"] = {"fields": fields}
+                actions.append(action)
+            results.extend(self._request("POST", "batch", json_data={"data": {"actions": actions}}).get("data", []))
+        return results
+
     # ========== Table & Record Operations ==========
     #
     # Records are their own object type (resource_type "record"): task endpoints
@@ -1887,7 +1909,7 @@ class AsanaClient:
             if date_value.get("date") and not date_value.get("date_time"):
                 values[f.get("name")] = date_value["date"]
             else:
-                values[f.get("name")] = f.get("display_value")
+                values[f.get("name")] = display_with_links(f)
         return values
 
     def upsert_record(
@@ -1995,6 +2017,25 @@ def format_task(task: dict, verbose: bool = False) -> str:
     return line
 
 
+def _resolve_links(client: AsanaClient, objects: List[dict], enabled: bool) -> None:
+    """Name the Asana URLs in each object's custom field values (adds "links" to those fields)."""
+    if enabled and objects:
+        annotate_objects(objects, LinkResolver(client))
+
+
+def _story_text(story: dict) -> str:
+    """A story's text with linked objects and @-mentions by name (plain text drops them to URLs)."""
+    if story.get("html_text"):
+        return asana_html_to_markdown(story["html_text"])
+    return story.get("text", "")
+
+
+def _print_linked_fields(obj: dict, indent: str = "    ") -> None:
+    for field in obj.get("custom_fields") or []:
+        if field.get("links"):
+            print(f"{indent}{field.get('name')}: {display_with_links(field)}")
+
+
 def cmd_workspaces(client: AsanaClient, args):
     """List workspaces."""
     workspaces = client.list_workspaces()
@@ -2035,6 +2076,7 @@ def cmd_projects(client: AsanaClient, args):
 def cmd_task(client: AsanaClient, args):
     """Get task details."""
     task = client.get_task(args.task_gid)
+    _resolve_links(client, [task], not getattr(args, "no_resolve_links", False))
     if args.json:
         print(json.dumps(task, indent=2))
         return
@@ -2060,6 +2102,12 @@ def cmd_task(client: AsanaClient, args):
     projects = task.get("projects", [])
     if projects:
         print(f"Projects: {', '.join(p['name'] for p in projects)}")
+
+    fields = [f for f in task.get("custom_fields") or [] if f.get("display_value") not in (None, "")]
+    if fields:
+        print("Fields:")
+        for f in fields:
+            print(f"  {f.get('name')}: {display_with_links(f)}")
 
     num_subtasks = task.get("num_subtasks", 0)
     if getattr(args, "subtasks", False) and num_subtasks > 0:
@@ -2096,6 +2144,7 @@ def cmd_tasks(client: AsanaClient, args):
             completed=False if args.incomplete else None,
             limit=args.limit,
         )
+    _resolve_links(client, tasks, getattr(args, "resolve_links", False))
 
     if args.json:
         print(json.dumps(tasks, indent=2))
@@ -2103,6 +2152,7 @@ def cmd_tasks(client: AsanaClient, args):
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
+        _print_linked_fields(task)
     print(format_count(len(tasks), args.limit))
 
 
@@ -2124,12 +2174,14 @@ def cmd_search(client: AsanaClient, args):
         custom_fields=custom_fields,
         limit=args.limit,
     )
+    _resolve_links(client, tasks, getattr(args, "resolve_links", False))
     if args.json:
         print(json.dumps(tasks, indent=2))
         return
 
     for task in tasks:
         print(format_task(task, verbose=args.verbose))
+        _print_linked_fields(task)
     print(format_count(len(tasks), args.limit))
 
 
@@ -2328,7 +2380,8 @@ def cmd_stories(client: AsanaClient, args):
         stype = s.get("resource_subtype", s.get("type", "unknown"))
         author = (s.get("created_by") or {}).get("name", "System")
         created = s.get("created_at", "")[:10]
-        text = s.get("text", "")[:100]
+        text = _story_text(s) if stype == "comment_added" else s.get("text", "")
+        text = text[:100]
 
         if stype == "comment_added":
             print(f"[{created}] {author}: {text}")
@@ -2939,6 +2992,7 @@ def cmd_add_column(client: AsanaClient, args):
 def cmd_records(client: AsanaClient, args):
     """List every record in a table."""
     records = client.get_records(args.table_gid, modified_since=args.modified_since)
+    _resolve_links(client, records, getattr(args, "resolve_links", False))
     if args.json:
         print(json.dumps(records, indent=2))
         return
@@ -2950,6 +3004,7 @@ def cmd_records(client: AsanaClient, args):
 def cmd_record(client: AsanaClient, args):
     """Show a record with its values and comments."""
     record = client.get_record(args.record_gid)
+    _resolve_links(client, [record], not getattr(args, "no_resolve_links", False))
     stories = client.get_record_stories(args.record_gid)
     comments = [s for s in stories if s.get("resource_subtype") == "comment_added"]
     if args.json:
@@ -2961,7 +3016,7 @@ def cmd_record(client: AsanaClient, args):
         print(f"\nComments ({len(comments)}):")
         for s in comments:
             author = (s.get("created_by") or {}).get("name", "System")
-            print(f"  [{s.get('created_at', '')[:10]}] {author}: {s.get('text', '')}")
+            print(f"  [{s.get('created_at', '')[:10]}] {author}: {_story_text(s)}")
 
 
 def _record_result(record: dict, args, verb: str) -> None:
@@ -3160,6 +3215,8 @@ Environment:
                       help="Display raw description without markdown conversion")
     task.add_argument("--subtasks", action="store_true",
                       help="Include subtask list in output")
+    task.add_argument("--no-resolve-links", action="store_true",
+                      help="Don't look up the names of Asana URLs in custom field values")
     task.set_defaults(func=cmd_task)
 
     # tasks
@@ -3169,6 +3226,8 @@ Environment:
     tasks.add_argument("-a", "--assignee", help="Filter by assignee (GID or 'me')")
     tasks.add_argument("-i", "--incomplete", action="store_true")
     tasks.add_argument("-l", "--limit", type=int, default=100)
+    tasks.add_argument("--resolve-links", action="store_true",
+                       help="Name the Asana URLs in custom field values (batched lookups)")
     tasks.set_defaults(func=cmd_tasks)
 
     # search
@@ -3182,6 +3241,8 @@ Environment:
     search.add_argument("-l", "--limit", type=int, default=50)
     search.add_argument("--custom-field", nargs=2, action="append", metavar=("FIELD_GID", "VALUE_GID"),
                         help="Filter by custom field: --custom-field FIELD_GID VALUE_GID (repeatable)")
+    search.add_argument("--resolve-links", action="store_true",
+                        help="Name the Asana URLs in custom field values (batched lookups)")
     search.set_defaults(func=cmd_search)
 
     # my-tasks
@@ -3486,10 +3547,14 @@ Environment:
     recs = subparsers.add_parser("records", help="List every record in a table, with values")
     recs.add_argument("table_gid", help="Table GID")
     recs.add_argument("--modified-since", help="Only records modified since this ISO timestamp")
+    recs.add_argument("--resolve-links", action="store_true",
+                      help="Name the Asana URLs in column values (batched lookups)")
     recs.set_defaults(func=cmd_records)
 
     rec = subparsers.add_parser("record", help="Show a record with values and comments")
     rec.add_argument("record_gid", help="Record GID")
+    rec.add_argument("--no-resolve-links", action="store_true",
+                     help="Don't look up the names of Asana URLs in column values")
     rec.set_defaults(func=cmd_record)
 
     crec = subparsers.add_parser("create-record", help="Create a record in a table")
